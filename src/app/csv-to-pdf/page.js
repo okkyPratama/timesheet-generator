@@ -14,11 +14,10 @@ export default function CsvToPdfPage() {
   const [error, setError] = useState('');
   const [pdfConfig, setPdfConfig] = useState({
     orientation: 'landscape',
-    fontSize: 8,
+    fontSize: 3,
     title: '',
     employeeName: '',
-    teamLeader: '',
-    period: ''
+    teamLeader: ''
   });
 
   const handleFileUpload = (file) => {
@@ -84,46 +83,12 @@ export default function CsvToPdfPage() {
     
     const pageWidth = pdfConfig.orientation === 'landscape' ? 297 : 210;
     const pageHeight = pdfConfig.orientation === 'landscape' ? 210 : 297;
-    let yPosition = 20;
 
-    // Header Section
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    const titleText = pdfConfig.title || 'Timesheet Report';
-    const titleWidth = doc.getTextWidth(titleText);
-    doc.text(titleText, (pageWidth - titleWidth) / 2, yPosition);
-    
-    yPosition += 10;
-
-    // Period
-    if (pdfConfig.period) {
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
-      const periodText = `Period: ${pdfConfig.period}`;
-      const periodWidth = doc.getTextWidth(periodText);
-      doc.text(periodText, (pageWidth - periodWidth) / 2, yPosition);
-      yPosition += 8;
-    }
-
-    // Employee Info Section
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const leftMargin = 14;
-    
-    if (pdfConfig.employeeName) {
-      doc.text(`Employee Name: ${pdfConfig.employeeName}`, leftMargin, yPosition);
-      yPosition += 6;
-    }
-    
-    if (pdfConfig.teamLeader) {
-      doc.text(`Team Leader: ${pdfConfig.teamLeader}`, leftMargin, yPosition);
-      yPosition += 6;
-    }
-
-    yPosition += 5;
+    // Start table at the very top of the page
+    let yPosition = 5;
 
     // Filter out completely empty rows
-    const filteredData = csvData.filter(row => 
+    const filteredData = csvData.filter(row =>
       row.some(cell => cell && cell.toString().trim() !== '')
     );
 
@@ -132,87 +97,130 @@ export default function CsvToPdfPage() {
       return;
     }
 
-    const headers = filteredData[0];
-    const body = filteredData.slice(1);
+    // Remove unwanted columns
+    const columnsToRemove = [
+      'Assignee Id',
+      'Reporter Id',
+      'Project type',
+      'Project lead',
+      'Project lead id'
+    ];
 
-    // Table
+    const headers = filteredData[0];
+
+    // Find indices of columns to remove (case-insensitive)
+    const indicesToRemove = headers
+      .map((header, index) => {
+        const headerLower = header.toString().toLowerCase().trim();
+        const shouldRemove = columnsToRemove.some(col =>
+          headerLower === col.toLowerCase()
+        );
+        return shouldRemove ? index : -1;
+      })
+      .filter(index => index !== -1);
+
+    // Filter headers and body to remove unwanted columns
+    const filteredHeaders = headers.filter((_, index) => !indicesToRemove.includes(index));
+    const body = filteredData.slice(1).map(row =>
+      row.filter((_, index) => !indicesToRemove.includes(index))
+    );
+
+    // Table configuration - More vertical spacing and better readability
     const tableStartY = yPosition;
+
     doc.autoTable({
-      head: [headers],
+      head: [filteredHeaders],
       body: body,
       startY: tableStartY,
       styles: {
         fontSize: pdfConfig.fontSize,
-        cellPadding: 2,
+        cellPadding: 1.2,
         overflow: 'linebreak',
-        cellWidth: 'wrap',
-        minCellHeight: 7,
-        halign: 'left'
+        cellWidth: 'auto',
+        minCellHeight: 4,
+        halign: 'left',
+        lineWidth: 0.03,
+        lineColor: [200, 200, 200],
+        valign: 'top'
       },
       headStyles: {
         fillColor: [41, 128, 185],
         textColor: 255,
         fontStyle: 'bold',
         halign: 'center',
-        valign: 'middle'
+        valign: 'middle',
+        cellPadding: 1.2,
+        fontSize: pdfConfig.fontSize,
+        minCellHeight: 5
       },
       bodyStyles: {
-        valign: 'top'
+        valign: 'top',
+        cellPadding: 1.2,
+        minCellHeight: 4
       },
       alternateRowStyles: {
         fillColor: [245, 245, 245]
       },
-      margin: { left: 14, right: 14 },
+      margin: { left: 3, right: 3, top: 3, bottom: 40 },
       tableWidth: 'auto',
-      columnStyles: headers.reduce((acc, _, index) => {
-        acc[index] = { cellWidth: 'auto' };
-        return acc;
-      }, {}),
+      theme: 'grid',
       didDrawPage: (data) => {
         // Footer with page numbers
         const pageCount = doc.internal.getNumberOfPages();
-        doc.setFontSize(8);
+        doc.setFontSize(6);
         doc.setFont('helvetica', 'normal');
         doc.text(
           `Page ${data.pageNumber} of ${pageCount}`,
-          pageWidth - 30,
-          pageHeight - 10
+          pageWidth - 20,
+          pageHeight - 2
         );
       }
     });
 
     // Get final Y position after table
     const finalY = doc.lastAutoTable.finalY;
-    
-    // Signature Section
-    const signatureY = Math.min(finalY + 20, pageHeight - 50);
-    
+
+    // Signature Section - Fixed at bottom of page
     // Only add signatures on the last page
     const totalPages = doc.internal.getNumberOfPages();
     doc.setPage(totalPages);
-    
+
+    // Position signature section at the bottom of the page
+    const signatureY = pageHeight - 35;
+
+    // Calculate centered positions with increased spacing
+    const pageCenter = pageWidth / 2;
+    const signatureSpacing = 60; // Increased spacing between signatures
+    const signatureWidth = 50;
+
+    const leftSignatureCenter = pageCenter - signatureSpacing;
+    const rightSignatureCenter = pageCenter + signatureSpacing;
+
+    const leftSignatureX = leftSignatureCenter - (signatureWidth / 2);
+    const rightSignatureX = rightSignatureCenter - (signatureWidth / 2);
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    
-    const leftSignatureX = 40;
-    const rightSignatureX = pageWidth - 80;
-    
-    // Employee Signature
-    doc.text('Prepared by:', leftSignatureX, signatureY);
-    doc.line(leftSignatureX, signatureY + 15, leftSignatureX + 50, signatureY + 15);
-    doc.text(pdfConfig.employeeName || '_________________', leftSignatureX, signatureY + 20);
-    doc.setFontSize(8);
-    doc.text('Employee', leftSignatureX + 10, signatureY + 25);
-    
-    // Team Leader Signature
-    doc.setFontSize(10);
-    doc.text('Approved by:', rightSignatureX, signatureY);
-    doc.line(rightSignatureX, signatureY + 15, rightSignatureX + 50, signatureY + 15);
-    doc.text(pdfConfig.teamLeader || '_________________', rightSignatureX, signatureY + 20);
-    doc.setFontSize(8);
-    doc.text('Team Leader', rightSignatureX + 8, signatureY + 25);
 
-    const pdfFileName = fileName.replace('.csv', '.pdf') || 'timesheet.pdf';
+    // Employee Signature - Center aligned
+    doc.text('Prepared by:', leftSignatureCenter, signatureY, { align: 'center' });
+    doc.line(leftSignatureX, signatureY + 12, leftSignatureX + signatureWidth, signatureY + 12);
+    doc.text(pdfConfig.employeeName || '_________________', leftSignatureCenter, signatureY + 17, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text('Employee', leftSignatureCenter, signatureY + 22, { align: 'center' });
+
+    // Team Leader Signature - Center aligned
+    doc.setFontSize(10);
+    doc.text('Approved by:', rightSignatureCenter, signatureY, { align: 'center' });
+    doc.line(rightSignatureX, signatureY + 12, rightSignatureX + signatureWidth, signatureY + 12);
+    doc.text(pdfConfig.teamLeader || '_________________', rightSignatureCenter, signatureY + 17, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text('Team Leader', rightSignatureCenter, signatureY + 22, { align: 'center' });
+
+    // Use PDF Filename field, fallback to CSV name
+    const pdfFileName = pdfConfig.title
+      ? `${pdfConfig.title}.pdf`
+      : fileName.replace('.csv', '.pdf') || 'timesheet.pdf';
     doc.save(pdfFileName);
   };
 
@@ -222,11 +230,10 @@ export default function CsvToPdfPage() {
     setError('');
     setPdfConfig({
       orientation: 'landscape',
-      fontSize: 8,
+      fontSize: 3,
       title: '',
       employeeName: '',
-      teamLeader: '',
-      period: ''
+      teamLeader: ''
     });
   };
 
@@ -310,7 +317,7 @@ export default function CsvToPdfPage() {
                     
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Document Title
+                        PDF Filename
                       </label>
                       <input
                         type="text"
@@ -318,24 +325,10 @@ export default function CsvToPdfPage() {
                         onChange={(e) =>
                           setPdfConfig({ ...pdfConfig, title: e.target.value })
                         }
-                        placeholder="e.g., Timesheet Report"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., Absen Jira November"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Period
-                      </label>
-                      <input
-                        type="text"
-                        value={pdfConfig.period}
-                        onChange={(e) =>
-                          setPdfConfig({ ...pdfConfig, period: e.target.value })
-                        }
-                        placeholder="e.g., January 2025"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <p className="text-xs text-gray-500 mt-1">This will be used as the PDF filename</p>
                     </div>
 
                     <div>
@@ -349,7 +342,7 @@ export default function CsvToPdfPage() {
                           setPdfConfig({ ...pdfConfig, employeeName: e.target.value })
                         }
                         placeholder="Enter employee name"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
                     </div>
 
@@ -364,7 +357,7 @@ export default function CsvToPdfPage() {
                           setPdfConfig({ ...pdfConfig, teamLeader: e.target.value })
                         }
                         placeholder="Enter team leader name"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
                     </div>
 
@@ -377,7 +370,7 @@ export default function CsvToPdfPage() {
                         onChange={(e) =>
                           setPdfConfig({ ...pdfConfig, orientation: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                       >
                         <option value="landscape">Landscape (Recommended for wide tables)</option>
                         <option value="portrait">Portrait</option>
@@ -390,7 +383,7 @@ export default function CsvToPdfPage() {
                       </label>
                       <input
                         type="number"
-                        min="6"
+                        min="3"
                         max="14"
                         value={pdfConfig.fontSize}
                         onChange={(e) =>
@@ -399,9 +392,9 @@ export default function CsvToPdfPage() {
                             fontSize: parseInt(e.target.value)
                           })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                       />
-                      <p className="text-xs text-gray-500 mt-1">Recommended: 7-9 for wide tables</p>
+                      <p className="text-xs text-gray-500 mt-1">Default is 3pt to match BATM template. Increase to 4-5pt if text is too small.</p>
                     </div>
 
                     <button

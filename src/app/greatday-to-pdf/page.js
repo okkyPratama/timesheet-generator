@@ -209,7 +209,7 @@ export default function GreatDayToPdfPage() {
                           setPdfConfig({ ...pdfConfig, companyName: e.target.value })
                         }
                         placeholder="Enter company name"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
                     </div>
 
@@ -224,7 +224,7 @@ export default function GreatDayToPdfPage() {
                           setPdfConfig({ ...pdfConfig, period: e.target.value })
                         }
                         placeholder="e.g., January 2024"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
                     </div>
 
