@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { UploadCloud, Download, FileText, X, CheckCircle } from 'lucide-react';
+import { UploadCloud, Download, FileText, X, CheckCircle, Image as ImageIcon } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
 export default function CsvToPdfPage() {
@@ -12,6 +12,8 @@ export default function CsvToPdfPage() {
   const [fileName, setFileName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState('');
+  const [signatureImage, setSignatureImage] = useState(null);
+  const [signaturePreview, setSignaturePreview] = useState(null);
   const [pdfConfig, setPdfConfig] = useState({
     orientation: 'landscape',
     fontSize: 3,
@@ -48,6 +50,31 @@ export default function CsvToPdfPage() {
         setError('Error parsing CSV file: ' + error.message);
       }
     });
+  };
+
+  const handleSignatureUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check if file is an image
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload a valid image file (PNG, JPG, etc.)');
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSignaturePreview(event.target.result);
+      setSignatureImage(event.target.result);
+    };
+    reader.readAsDataURL(file);
+    setError('');
+  };
+
+  const removeSignature = () => {
+    setSignatureImage(null);
+    setSignaturePreview(null);
   };
 
   const handleDragOver = (e) => {
@@ -202,20 +229,36 @@ export default function CsvToPdfPage() {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
 
-    // Employee Signature - Center aligned
+    // Employee Signature - Center aligned with increased spacing
     doc.text('Prepared by:', leftSignatureCenter, signatureY, { align: 'center' });
-    doc.line(leftSignatureX, signatureY + 12, leftSignatureX + signatureWidth, signatureY + 12);
-    doc.text(pdfConfig.employeeName || '_________________', leftSignatureCenter, signatureY + 17, { align: 'center' });
+    
+    // Add signature image if available - positioned with more space from text
+    if (signatureImage) {
+      const imgWidth = 30;
+      const imgHeight = 10;
+      const imgX = leftSignatureCenter - (imgWidth / 2);
+      const imgY = signatureY + 4; // Increased from +2 to +4 for more space
+      
+      try {
+        doc.addImage(signatureImage, 'PNG', imgX, imgY, imgWidth, imgHeight);
+      } catch (error) {
+        console.error('Error adding signature image:', error);
+      }
+    }
+    
+    // Signature line - positioned lower to accommodate signature image
+    doc.line(leftSignatureX, signatureY + 16, leftSignatureX + signatureWidth, signatureY + 16); // Changed from +12 to +16
+    doc.text(pdfConfig.employeeName || '_________________', leftSignatureCenter, signatureY + 21, { align: 'center' }); // Changed from +17 to +21
     doc.setFontSize(8);
-    doc.text('Employee', leftSignatureCenter, signatureY + 22, { align: 'center' });
+    doc.text('Employee', leftSignatureCenter, signatureY + 26, { align: 'center' }); // Changed from +22 to +26
 
-    // Team Leader Signature - Center aligned
+    // Team Leader Signature - Center aligned with same spacing
     doc.setFontSize(10);
     doc.text('Approved by:', rightSignatureCenter, signatureY, { align: 'center' });
-    doc.line(rightSignatureX, signatureY + 12, rightSignatureX + signatureWidth, signatureY + 12);
-    doc.text(pdfConfig.teamLeader || '_________________', rightSignatureCenter, signatureY + 17, { align: 'center' });
+    doc.line(rightSignatureX, signatureY + 16, rightSignatureX + signatureWidth, signatureY + 16); // Changed from +12 to +16
+    doc.text(pdfConfig.teamLeader || '_________________', rightSignatureCenter, signatureY + 21, { align: 'center' }); // Changed from +17 to +21
     doc.setFontSize(8);
-    doc.text('Team Leader', rightSignatureCenter, signatureY + 22, { align: 'center' });
+    doc.text('Team Leader', rightSignatureCenter, signatureY + 26, { align: 'center' }); // Changed from +22 to +26
 
     // Use PDF Filename field, fallback to CSV name
     const pdfFileName = pdfConfig.title
@@ -228,6 +271,8 @@ export default function CsvToPdfPage() {
     setCsvData(null);
     setFileName('');
     setError('');
+    setSignatureImage(null);
+    setSignaturePreview(null);
     setPdfConfig({
       orientation: 'landscape',
       fontSize: 3,
@@ -344,6 +389,48 @@ export default function CsvToPdfPage() {
                         placeholder="Enter employee name"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Tanda Tangan Karyawan (Employee Signature)
+                      </label>
+                      {!signaturePreview ? (
+                        <label className="cursor-pointer">
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-all text-center">
+                            <ImageIcon className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+                            <p className="text-sm text-gray-600 mb-1">Upload signature image</p>
+                            <p className="text-xs text-gray-500">PNG, JPG (Recommended: transparent PNG)</p>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleSignatureUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      ) : (
+                        <div className="relative border border-gray-300 rounded-lg p-3 bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            <img 
+                              src={signaturePreview} 
+                              alt="Signature preview" 
+                              className="h-16 w-auto object-contain bg-white border border-gray-200 rounded px-2"
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-700">Signature uploaded</p>
+                              <p className="text-xs text-gray-500">Will appear above employee name</p>
+                            </div>
+                            <button
+                              onClick={removeSignature}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                              aria-label="Remove signature"
+                            >
+                              <X className="w-5 h-5 text-red-600" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
