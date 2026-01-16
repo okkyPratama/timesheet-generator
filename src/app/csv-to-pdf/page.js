@@ -13,6 +13,7 @@ const FIELD_MAPPING = [
   { csvField: 'Issue key', displayName: 'Issue key' },
   { csvField: 'Issue id', displayName: 'Issue id' },
   { csvField: 'Summary', displayName: 'Summary' },
+  { csvField: 'Description', displayName: 'Description' },
   { csvField: 'Assignee', displayName: 'Assignee' },
   { csvField: 'Reporter', displayName: 'Reporter' },
   { csvField: 'Priority', displayName: 'Priority' },
@@ -21,8 +22,10 @@ const FIELD_MAPPING = [
   { csvField: 'Updated', displayName: 'Updated' },
   { csvField: 'Custom field (Plan Start Date)', displayName: 'Plan Start Date' },
   { csvField: 'Custom field (Plan End Date)', displayName: 'Plan End Date' },
+  { csvField: 'Custom field (Plan Duration (Decimal Hours))', displayName: 'Plan Duration' },
   { csvField: 'Custom field (Actual Start.)', displayName: 'Actual Start.' },
   { csvField: 'Custom field (Actual End.)', displayName: 'Actual End.' },
+  { csvField: 'Custom field (Actual Duration (Decimal Hours))', displayName: 'Actual Duration' },
   { csvField: 'Project key', displayName: 'Project key' },
   { csvField: 'Project name', displayName: 'Project name' },
   { csvField: 'Project type', displayName: 'Project type' },
@@ -100,7 +103,7 @@ export default function CsvToPdfPage() {
         if (results.data && results.data.length > 0) {
           setCsvData(results.data);
 
-          // Since we always map to 18 columns, always use landscape orientation
+          // Since we always map to 21 columns, always use landscape orientation
           setPdfConfig(prev => ({ ...prev, orientation: 'landscape' }));
         } else {
           setError('CSV file is empty');
@@ -322,10 +325,10 @@ export default function CsvToPdfPage() {
           {/* Header */}
           <header className="mb-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              CSV to PDF Converter
+              Jira CSV to PDF Converter
             </h1>
             <p className="text-gray-600">
-              Upload your CSV file and convert it to a beautifully formatted PDF
+              Upload your Jira CSV file and convert it to a beautifully formatted PDF
             </p>
           </header>
 

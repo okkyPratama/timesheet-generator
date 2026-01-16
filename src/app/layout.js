@@ -13,7 +13,7 @@ const geistMono = localFont({
 });
 
 export const metadata = {
-  title: "CSV to PDF Converter",
+  title: "Jira CSV to PDF Converter",
   description: "Convert CSV files to beautifully formatted PDF documents",
 };
 

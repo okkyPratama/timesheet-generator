@@ -7,10 +7,10 @@ import { useState } from 'react';
 
 const menuItems = [
   {
-    name: 'CSV to PDF',
+    name: 'Jira CSV to PDF',
     path: '/csv-to-pdf',
     icon: FileText,
-    description: 'Convert CSV files to PDF'
+    description: 'Convert Jira CSV files to PDF'
   },
   {
     name: 'Great Day to PDF',
