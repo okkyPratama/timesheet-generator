@@ -7,6 +7,68 @@ import 'jspdf-autotable';
 import { UploadCloud, Download, FileText, X, CheckCircle, Image as ImageIcon } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
+// Field mapping configuration - defines which CSV fields to include and their display names
+const FIELD_MAPPING = [
+  { csvField: 'Issue Type', displayName: 'Issue Type' },
+  { csvField: 'Issue key', displayName: 'Issue key' },
+  { csvField: 'Issue id', displayName: 'Issue id' },
+  { csvField: 'Summary', displayName: 'Summary' },
+  { csvField: 'Assignee', displayName: 'Assignee' },
+  { csvField: 'Reporter', displayName: 'Reporter' },
+  { csvField: 'Priority', displayName: 'Priority' },
+  { csvField: 'Status', displayName: 'Status' },
+  { csvField: 'Created', displayName: 'Created' },
+  { csvField: 'Updated', displayName: 'Updated' },
+  { csvField: 'Custom field (Plan Start Date)', displayName: 'Plan Start Date' },
+  { csvField: 'Custom field (Plan End Date)', displayName: 'Plan End Date' },
+  { csvField: 'Custom field (Actual Start.)', displayName: 'Actual Start.' },
+  { csvField: 'Custom field (Actual End.)', displayName: 'Actual End.' },
+  { csvField: 'Project key', displayName: 'Project key' },
+  { csvField: 'Project name', displayName: 'Project name' },
+  { csvField: 'Project type', displayName: 'Project type' },
+  { csvField: 'Project lead', displayName: 'Project lead' }
+];
+
+// Helper function to map CSV data to defined fields
+const mapCsvDataToFields = (csvData, fieldMapping) => {
+  if (!csvData || csvData.length === 0) {
+    return { headers: [], body: [] };
+  }
+
+  const csvHeaders = csvData[0];
+
+  // Create a map of lowercase headers to their indices for case-insensitive matching
+  const headerIndexMap = {};
+  csvHeaders.forEach((header, index) => {
+    headerIndexMap[header.toString().toLowerCase().trim()] = index;
+  });
+
+  // Build column mapping: for each field in FIELD_MAPPING, find its index in CSV
+  const columnMapping = fieldMapping.map(field => {
+    const csvFieldLower = field.csvField.toLowerCase().trim();
+    const index = headerIndexMap[csvFieldLower];
+    return {
+      displayName: field.displayName,
+      csvIndex: index !== undefined ? index : null
+    };
+  });
+
+  // Build mapped headers
+  const mappedHeaders = columnMapping.map(col => col.displayName);
+
+  // Build mapped body rows
+  const mappedBody = csvData.slice(1).map(row => {
+    return columnMapping.map(col => {
+      if (col.csvIndex !== null && row[col.csvIndex] !== undefined) {
+        return row[col.csvIndex];
+      }
+      return ''; // Empty string for missing fields
+    });
+  });
+
+  return { headers: mappedHeaders, body: mappedBody };
+};
+
 export default function CsvToPdfPage() {
   const [csvData, setCsvData] = useState(null);
   const [fileName, setFileName] = useState('');
@@ -37,11 +99,9 @@ export default function CsvToPdfPage() {
       complete: (results) => {
         if (results.data && results.data.length > 0) {
           setCsvData(results.data);
-          
-          const columnCount = results.data[0]?.length || 0;
-          if (columnCount > 8) {
-            setPdfConfig(prev => ({ ...prev, orientation: 'landscape' }));
-          }
+
+          // Since we always map to 18 columns, always use landscape orientation
+          setPdfConfig(prev => ({ ...prev, orientation: 'landscape' }));
         } else {
           setError('CSV file is empty');
         }
@@ -124,33 +184,8 @@ export default function CsvToPdfPage() {
       return;
     }
 
-    // Remove unwanted columns
-    const columnsToRemove = [
-      'Assignee Id',
-      'Reporter Id',
-      'Project type',
-      'Project lead',
-      'Project lead id'
-    ];
-
-    const headers = filteredData[0];
-
-    // Find indices of columns to remove (case-insensitive)
-    const indicesToRemove = headers
-      .map((header, index) => {
-        const headerLower = header.toString().toLowerCase().trim();
-        const shouldRemove = columnsToRemove.some(col =>
-          headerLower === col.toLowerCase()
-        );
-        return shouldRemove ? index : -1;
-      })
-      .filter(index => index !== -1);
-
-    // Filter headers and body to remove unwanted columns
-    const filteredHeaders = headers.filter((_, index) => !indicesToRemove.includes(index));
-    const body = filteredData.slice(1).map(row =>
-      row.filter((_, index) => !indicesToRemove.includes(index))
-    );
+    // Map CSV data to defined fields
+    const { headers: filteredHeaders, body } = mapCsvDataToFields(filteredData, FIELD_MAPPING);
 
     // Table configuration - More vertical spacing and better readability
     const tableStartY = yPosition;
@@ -161,10 +196,10 @@ export default function CsvToPdfPage() {
       startY: tableStartY,
       styles: {
         fontSize: pdfConfig.fontSize,
-        cellPadding: 1.2,
+        cellPadding: 1,
         overflow: 'linebreak',
         cellWidth: 'auto',
-        minCellHeight: 4,
+        minCellHeight: 3.5,
         halign: 'left',
         lineWidth: 0.03,
         lineColor: [200, 200, 200],
@@ -176,19 +211,19 @@ export default function CsvToPdfPage() {
         fontStyle: 'bold',
         halign: 'center',
         valign: 'middle',
-        cellPadding: 1.2,
+        cellPadding: 1,
         fontSize: pdfConfig.fontSize,
-        minCellHeight: 5
+        minCellHeight: 4.5
       },
       bodyStyles: {
         valign: 'top',
-        cellPadding: 1.2,
-        minCellHeight: 4
+        cellPadding: 1,
+        minCellHeight: 3.5
       },
       alternateRowStyles: {
         fillColor: [245, 245, 245]
       },
-      margin: { left: 3, right: 3, top: 3, bottom: 40 },
+      margin: { left: 2, right: 2, top: 3, bottom: 40 },
       tableWidth: 'auto',
       theme: 'grid',
       didDrawPage: (data) => {
@@ -230,7 +265,7 @@ export default function CsvToPdfPage() {
     doc.setFont('helvetica', 'normal');
 
     // Employee Signature - Center aligned with increased spacing
-    doc.text('Prepared by:', leftSignatureCenter, signatureY, { align: 'center' });
+    doc.text('Karyawan', leftSignatureCenter, signatureY, { align: 'center' });
     
     // Add signature image if available - positioned with more space from text
     if (signatureImage) {
@@ -250,15 +285,13 @@ export default function CsvToPdfPage() {
     doc.line(leftSignatureX, signatureY + 16, leftSignatureX + signatureWidth, signatureY + 16); // Changed from +12 to +16
     doc.text(pdfConfig.employeeName || '_________________', leftSignatureCenter, signatureY + 21, { align: 'center' }); // Changed from +17 to +21
     doc.setFontSize(8);
-    doc.text('Employee', leftSignatureCenter, signatureY + 26, { align: 'center' }); // Changed from +22 to +26
 
     // Team Leader Signature - Center aligned with same spacing
     doc.setFontSize(10);
-    doc.text('Approved by:', rightSignatureCenter, signatureY, { align: 'center' });
+    doc.text('Team Leader', rightSignatureCenter, signatureY, { align: 'center' });
     doc.line(rightSignatureX, signatureY + 16, rightSignatureX + signatureWidth, signatureY + 16); // Changed from +12 to +16
     doc.text(pdfConfig.teamLeader || '_________________', rightSignatureCenter, signatureY + 21, { align: 'center' }); // Changed from +17 to +21
     doc.setFontSize(8);
-    doc.text('Team Leader', rightSignatureCenter, signatureY + 26, { align: 'center' }); // Changed from +22 to +26
 
     // Use PDF Filename field, fallback to CSV name
     const pdfFileName = pdfConfig.title
@@ -344,7 +377,7 @@ export default function CsvToPdfPage() {
                       <div>
                         <p className="font-medium text-gray-800">{fileName}</p>
                         <p className="text-sm text-gray-600">
-                          {csvData.length} rows × {csvData[0]?.length || 0} columns
+                          {csvData.length} rows × {FIELD_MAPPING.length} columns (mapped)
                         </p>
                       </div>
                     </div>
@@ -509,46 +542,52 @@ export default function CsvToPdfPage() {
                 Data Preview
               </h2>
 
-              {csvData && csvData.length > 0 ? (
-                <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        {csvData[0].map((header, index) => (
-                          <th
-                            key={index}
-                            className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider whitespace-nowrap"
-                          >
-                            {header || `Column ${index + 1}`}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {csvData.slice(1, 50).map((row, rowIndex) => (
-                        <tr
-                          key={rowIndex}
-                          className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                        >
-                          {row.map((cell, cellIndex) => (
-                            <td
-                              key={cellIndex}
-                              className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"
+              {csvData && csvData.length > 0 ? (() => {
+                // Apply field mapping to preview data
+                const { headers: mappedHeaders, body: mappedBody } = mapCsvDataToFields(csvData, FIELD_MAPPING);
+                const previewRows = mappedBody.slice(0, 50);
+
+                return (
+                  <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          {mappedHeaders.map((header, index) => (
+                            <th
+                              key={index}
+                              className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider whitespace-nowrap"
                             >
-                              {cell}
-                            </td>
+                              {header || `Column ${index + 1}`}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {csvData.length > 51 && (
-                    <div className="p-3 bg-gray-50 text-center text-sm text-gray-600">
-                      Showing first 50 rows of {csvData.length - 1} data rows
-                    </div>
-                  )}
-                </div>
-              ) : (
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {previewRows.map((row, rowIndex) => (
+                          <tr
+                            key={rowIndex}
+                            className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                          >
+                            {row.map((cell, cellIndex) => (
+                              <td
+                                key={cellIndex}
+                                className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"
+                              >
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {mappedBody.length > 50 && (
+                      <div className="p-3 bg-gray-50 text-center text-sm text-gray-600">
+                        Showing first 50 rows of {mappedBody.length} data rows
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
                 <div className="text-center py-16 text-gray-400">
                   <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
                   <p>No data to preview</p>
