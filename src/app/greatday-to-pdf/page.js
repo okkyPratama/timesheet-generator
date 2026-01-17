@@ -7,6 +7,72 @@ import 'jspdf-autotable';
 import { UploadCloud, Download, FileSpreadsheet, X, CheckCircle, User, Image as ImageIcon } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
+// Field mapping configuration - defines which Excel fields to include and their display names
+const FIELD_MAPPING = [
+  { excelField: 'No.', displayName: 'No.' },
+  { excelField: 'Emp No.', displayName: 'Emp No.' },
+  { excelField: 'Employee', displayName: 'Employee' },
+  { excelField: 'Date', displayName: 'Date' },
+  { excelField: 'Shift Name', displayName: 'Shift Name' },
+  { excelField: 'Shift In', displayName: 'Shift In' },
+  { excelField: 'Shift Out', displayName: 'Shift Out' },
+  { excelField: 'Actual In', displayName: 'Actual In' },
+  { excelField: 'Actual Out', displayName: 'Actual Out' },
+  { excelField: 'Remark', displayName: 'Remark' }
+];
+
+// Helper function to map Excel data to defined fields
+const mapExcelDataToFields = (excelData, fieldMapping) => {
+  if (!excelData || excelData.length < 3) {
+    return { headers: [], body: [] };
+  }
+
+  // Excel headers are in row index 2 (third row)
+  const excelHeaders = excelData[2] || [];
+
+  // Create a map of lowercase headers to their indices for case-insensitive matching
+  const headerIndexMap = {};
+  excelHeaders.forEach((header, index) => {
+    if (header) {
+      headerIndexMap[header.toString().toLowerCase().trim()] = index;
+    }
+  });
+
+  // Build column mapping: for each field in FIELD_MAPPING, find its index in Excel
+  const columnMapping = fieldMapping.map(field => {
+    const excelFieldLower = field.excelField.toLowerCase().trim();
+    const index = headerIndexMap[excelFieldLower];
+    return {
+      displayName: field.displayName,
+      excelIndex: index !== undefined ? index : null
+    };
+  });
+
+  // Build mapped headers
+  const mappedHeaders = columnMapping.map(col => col.displayName);
+
+  // Build mapped body rows (data starts from row index 3)
+  const mappedBody = excelData.slice(3).map(row => {
+    return columnMapping.map(col => {
+      if (col.excelIndex !== null && row[col.excelIndex] !== undefined) {
+        let value = row[col.excelIndex];
+
+        // Special handling for Remark field - filter out numeric patterns
+        if (col.displayName === 'Remark') {
+          const remarkValue = value || '';
+          const isNumericPattern = /^\d+\s*\(\d+:\d+\)$/.test(remarkValue.toString().trim()) || /^\d+$/.test(remarkValue.toString().trim());
+          return isNumericPattern ? '' : remarkValue;
+        }
+
+        return value;
+      }
+      return '';
+    });
+  });
+
+  return { headers: mappedHeaders, body: mappedBody };
+};
+
 export default function GreatDayToBpsPdfPage() {
   const [attendanceData, setAttendanceData] = useState(null);
   const [fileName, setFileName] = useState('');
@@ -153,27 +219,8 @@ export default function GreatDayToBpsPdfPage() {
     doc.setFont('times', 'bold');
     doc.text('Attendance Report', pageWidth / 2, 14, { align: 'center' });
 
-    // Prepare table data
-    const headers = ['No.', 'Emp No.', 'Employee', 'Date', 'Shift Name', 'Shift In', 'Shift Out', 'Actual In', 'Actual Out', 'Remark'];
-    const dataRows = attendanceData.slice(3).map(row => {
-      // Filter remark field - only show if it's actual text, not just numbers or patterns like "8 (0:8)"
-      const remarkValue = row[11] || '';
-      const isNumericPattern = /^\d+\s*\(\d+:\d+\)$/.test(remarkValue.toString().trim()) || /^\d+$/.test(remarkValue.toString().trim());
-      const filteredRemark = isNumericPattern ? '' : remarkValue;
-
-      return [
-        row[0] || '',
-        row[1] || '',
-        row[2] || '',
-        row[5] || '',
-        row[6] || '',
-        row[7] || '',
-        row[8] || '',
-        row[9] || '',
-        row[10] || '',
-        filteredRemark
-      ];
-    });
+    // Prepare table data using field mapping
+    const { headers, body: dataRows } = mapExcelDataToFields(attendanceData, FIELD_MAPPING);
 
     // Main table - adjusted for portrait orientation
     doc.autoTable({
@@ -183,14 +230,14 @@ export default function GreatDayToBpsPdfPage() {
       margin: { left: 5, right: 5 },
       styles: {
         font: 'times',
-        fontSize: 5.5,
+        fontSize: 6.5,
         cellPadding: 0.6,
         overflow: 'linebreak',
         cellWidth: 'wrap',
         lineWidth: 0.2,
         lineColor: [0, 0, 0],
         valign: 'middle',
-        minCellHeight: 3.5
+        minCellHeight: 4
       },
       headStyles: {
         font: 'times',
@@ -548,37 +595,43 @@ export default function GreatDayToBpsPdfPage() {
                 Data Preview
               </h2>
 
-              {attendanceData && attendanceData.length > 0 ? (
-                <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-200 text-xs">
-                    <thead className="bg-green-50 sticky top-0">
-                      <tr>
-                        {attendanceData[2]?.map((header, index) => (
-                          <th key={index} className="px-2 py-2 text-left text-xs font-medium text-gray-700">
-                            {header || `Col ${index + 1}`}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {attendanceData.slice(3, 23).map((row, rowIndex) => (
-                        <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          {row.map((cell, cellIndex) => (
-                            <td key={cellIndex} className="px-2 py-2 whitespace-nowrap text-gray-900">
-                              {cell || ''}
-                            </td>
+              {attendanceData && attendanceData.length > 0 ? (() => {
+                // Apply field mapping to preview data
+                const { headers: mappedHeaders, body: mappedBody } = mapExcelDataToFields(attendanceData, FIELD_MAPPING);
+                const previewRows = mappedBody.slice(0, 20);
+
+                return (
+                  <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
+                    <table className="min-w-full divide-y divide-gray-200 text-xs">
+                      <thead className="bg-green-50 sticky top-0">
+                        <tr>
+                          {mappedHeaders.map((header, index) => (
+                            <th key={index} className="px-2 py-2 text-left text-xs font-medium text-gray-700">
+                              {header || `Col ${index + 1}`}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {attendanceData.length > 23 && (
-                    <div className="p-3 bg-gray-50 text-center text-xs text-gray-600">
-                      Showing first 20 data rows of {attendanceData.length - 3} total
-                    </div>
-                  )}
-                </div>
-              ) : (
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {previewRows.map((row, rowIndex) => (
+                          <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            {row.map((cell, cellIndex) => (
+                              <td key={cellIndex} className="px-2 py-2 whitespace-nowrap text-gray-900">
+                                {cell || ''}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {mappedBody.length > 20 && (
+                      <div className="p-3 bg-gray-50 text-center text-xs text-gray-600">
+                        Showing first 20 data rows of {mappedBody.length} total
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
                 <div className="text-center py-16 text-gray-400">
                   <FileSpreadsheet className="w-16 h-16 mx-auto mb-4 opacity-50" />
                   <p>No attendance data to preview</p>
