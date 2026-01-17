@@ -4,7 +4,7 @@ import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { UploadCloud, Download, FileSpreadsheet, X, CheckCircle, User } from 'lucide-react';
+import { UploadCloud, Download, FileSpreadsheet, X, CheckCircle, User, Image as ImageIcon } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
 export default function GreatDayToBpsPdfPage() {
@@ -13,10 +13,14 @@ export default function GreatDayToBpsPdfPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState('');
   const [employeeStats, setEmployeeStats] = useState(null);
+  const [signatureImage, setSignatureImage] = useState(null);
+  const [signaturePreview, setSignaturePreview] = useState(null);
   const [pdfConfig, setPdfConfig] = useState({
+    fileName: '',
     employeeName: '',
     checkedBy: '',
-    approvedBy: ''
+    approvedBy: '',
+    justifikasi: ''
   });
 
   const handleFileUpload = (file) => {
@@ -68,6 +72,31 @@ export default function GreatDayToBpsPdfPage() {
     }
   };
 
+  const handleSignatureUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check if file is an image
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload a valid image file (PNG, JPG, etc.)');
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSignaturePreview(event.target.result);
+      setSignatureImage(event.target.result);
+    };
+    reader.readAsDataURL(file);
+    setError('');
+  };
+
+  const removeSignature = () => {
+    setSignatureImage(null);
+    setSignaturePreview(null);
+  };
+
   const calculateStats = (data) => {
     if (!data || data.length < 4) return;
     
@@ -115,123 +144,212 @@ export default function GreatDayToBpsPdfPage() {
       return;
     }
 
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
-    
+    const pageHeight = doc.internal.pageSize.getHeight();
+
     // Title
-    doc.setFontSize(16);
-    doc.setFont(undefined, 'bold');
-    doc.text('Attendance Report', pageWidth / 2, 15, { align: 'center' });
-    
+    doc.setFontSize(7);
+    doc.setFont('times', 'bold');
+    doc.text('Attendance Report', pageWidth / 2, 14, { align: 'center' });
+
     // Prepare table data
     const headers = ['No.', 'Emp No.', 'Employee', 'Date', 'Shift Name', 'Shift In', 'Shift Out', 'Actual In', 'Actual Out', 'Remark'];
-    const dataRows = attendanceData.slice(3).map(row => [
-      row[0] || '',
-      row[1] || '',
-      row[2] || '',
-      row[5] || '',
-      row[6] || '',
-      row[7] || '',
-      row[8] || '',
-      row[9] || '',
-      row[10] || '',
-      ''
-    ]);
+    const dataRows = attendanceData.slice(3).map(row => {
+      // Filter remark field - only show if it's actual text, not just numbers or patterns like "8 (0:8)"
+      const remarkValue = row[11] || '';
+      const isNumericPattern = /^\d+\s*\(\d+:\d+\)$/.test(remarkValue.toString().trim()) || /^\d+$/.test(remarkValue.toString().trim());
+      const filteredRemark = isNumericPattern ? '' : remarkValue;
 
-    // Find remarks for justification
-    const justifications = [];
-    attendanceData.slice(3).forEach(row => {
-      const remark = row[10] || '';
-      const date = row[5] || '';
-      if (remark && remark !== '' && date) {
-        justifications.push(`${date}: ${remark}`);
-      }
+      return [
+        row[0] || '',
+        row[1] || '',
+        row[2] || '',
+        row[5] || '',
+        row[6] || '',
+        row[7] || '',
+        row[8] || '',
+        row[9] || '',
+        row[10] || '',
+        filteredRemark
+      ];
     });
 
-    // Main table
+    // Main table - adjusted for portrait orientation
     doc.autoTable({
       head: [headers],
       body: dataRows,
-      startY: 22,
-      margin: { left: 10, right: 10 },
+      startY: 16,
+      margin: { left: 5, right: 5 },
       styles: {
-        fontSize: 7,
-        cellPadding: 1.5,
+        font: 'times',
+        fontSize: 5.5,
+        cellPadding: 0.6,
         overflow: 'linebreak',
-        cellWidth: 'wrap'
+        cellWidth: 'wrap',
+        lineWidth: 0.2,
+        lineColor: [0, 0, 0],
+        valign: 'middle',
+        minCellHeight: 3.5
       },
       headStyles: {
-        fillColor: [255, 255, 255],
+        font: 'times',
+        fillColor: [192, 192, 192],
         textColor: [0, 0, 0],
         fontStyle: 'bold',
-        lineWidth: 0.1,
-        lineColor: [0, 0, 0]
+        lineWidth: 0.2,
+        lineColor: [0, 0, 0],
+        halign: 'center',
+        valign: 'middle',
+        cellPadding: 0.8,
+        minCellHeight: 4
       },
       bodyStyles: {
-        lineWidth: 0.1,
-        lineColor: [0, 0, 0]
+        font: 'times',
+        lineWidth: 0.2,
+        lineColor: [0, 0, 0],
+        minCellHeight: 3.5
       },
       columnStyles: {
-        0: { cellWidth: 10 },
-        1: { cellWidth: 20 },
-        2: { cellWidth: 40 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 45 },
-        5: { cellWidth: 15 },
-        6: { cellWidth: 15 },
-        7: { cellWidth: 15 },
-        8: { cellWidth: 15 },
-        9: { cellWidth: 60 }
+        0: { cellWidth: 8, halign: 'center' },
+        1: { cellWidth: 16 },
+        2: { cellWidth: 32 },
+        3: { cellWidth: 18 },
+        4: { cellWidth: 32 },
+        5: { cellWidth: 11, halign: 'center' },
+        6: { cellWidth: 11, halign: 'center' },
+        7: { cellWidth: 11, halign: 'center' },
+        8: { cellWidth: 11, halign: 'center' },
+        9: { cellWidth: 40 }
       },
-      didDrawPage: (data) => {
-        if (data.pageNumber === data.pageCount) {
-          let finalY = data.cursor.y + 5;
-          
-          // Justification section
-          if (justifications.length > 0) {
-            doc.setFontSize(8);
-            doc.setFont(undefined, 'bold');
-            doc.text('Justifikasi :', 10, finalY);
-            doc.setFont(undefined, 'normal');
-            
-            justifications.forEach((just, i) => {
-              doc.text(just, 10, finalY + 5 + (i * 4));
-            });
-            
-            finalY += 5 + (justifications.length * 4) + 3;
-          }
-          
-          // Declaration
-          doc.setFontSize(7);
-          doc.setFont(undefined, 'normal');
-          const declaration = 'Dengan ini saya menyatakan dengan sebenarnya bahwa seluruh data dan informasi yang saya sampaikan dalam dokumen ini adalah benar dan dapat dipertanggung jawabkan. Apabila ditemukan data yang tidak valid atau palsu, saya bersedia menerima sanksi sesuai dengan peraturan yang berlaku.';
-          const splitDeclaration = doc.splitTextToSize(declaration, pageWidth - 20);
-          doc.text(splitDeclaration, 10, finalY);
-          finalY += (splitDeclaration.length * 3) + 3;
-          
-          // Print date
-          const now = new Date();
-          const printDate = `Tanggal Cetak : ${now.toLocaleDateString('en-US', { weekday: 'long' })}, ${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString('en-GB')}`;
-          doc.text(printDate, 10, finalY);
-          finalY += 8;
-          
-          // Signature section
-          const colWidth = (pageWidth - 20) / 3;
-          
-          doc.setFont(undefined, 'bold');
-          doc.text('Tanda Tangan Pegawai,', 10, finalY);
-          doc.text(`( ${pdfConfig.employeeName || 'EMPLOYEE NAME'} )`, 10, finalY + 20);
-          
-          doc.text('Diperiksa Oleh :', 10 + colWidth, finalY);
-          doc.text(`( ${pdfConfig.checkedBy || 'CHECKER NAME'} )`, 10 + colWidth, finalY + 20);
-          
-          doc.text('Disetujui Oleh :', 10 + (colWidth * 2), finalY);
-          doc.text(`( ${pdfConfig.approvedBy || 'APPROVER NAME'} )`, 10 + (colWidth * 2), finalY + 20);
-        }
-      }
+      theme: 'grid'
     });
 
-    const outputFileName = fileName.replace(/\.(xlsx|xls)$/i, '_BPS_Format.pdf');
+    let finalY = doc.lastAutoTable.finalY + 3;
+    const marginLeft = 5; // Match table margin
+    const tableWidth = 190; // Total width of table columns (8+16+32+18+32+11+11+11+11+40)
+
+    // Justifikasi section - bordered box with label inside
+    const justBoxHeight = 55; // Height to match ~16 rows in Excel template
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.2);
+    doc.rect(marginLeft, finalY, tableWidth, justBoxHeight);
+
+    // "Justifikasi :" label inside box at top-left corner (touching the line)
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('Justifikasi :', marginLeft + 0.5, finalY + 2.5);
+
+    // Add justifikasi text if provided (below the label)
+    if (pdfConfig.justifikasi && pdfConfig.justifikasi.trim() !== '') {
+      doc.setFontSize(7);
+      doc.setFont('times', 'normal');
+      const justLines = doc.splitTextToSize(pdfConfig.justifikasi, tableWidth - 6);
+      doc.text(justLines, marginLeft + 2, finalY + 8);
+    }
+
+    finalY += justBoxHeight + 3;
+
+    // Declaration text in bordered box - manually split into 3 lines to match template
+    doc.setFontSize(7);
+    doc.setFont('times', 'italic');
+    const declarationLines = [
+      'Dengan ini saya menyatakan dengan sebenarnya bahwa seluruh data dan informasi yang saya sampaikan dalam dokumen ini adalah benar dan',
+      'dapat dipertanggung jawabkan. Apabila ditemukan data yang tidak valid atau palsu, saya bersedia menerima sanksi sesuai dengan peraturan',
+      'yang berlaku.'
+    ];
+
+    // Draw declaration box
+    const declBoxHeight = 12;
+    doc.setLineWidth(0.2);
+    doc.rect(marginLeft, finalY, tableWidth, declBoxHeight);
+
+    // Add text inside the box (center aligned, 3 lines)
+    const boxCenterX = marginLeft + tableWidth / 2;
+    declarationLines.forEach((line, index) => {
+      doc.text(line, boxCenterX, finalY + 3 + (index * 3), { align: 'center' });
+    });
+
+    finalY += declBoxHeight + 3;
+
+    // Four-column signature section with borders
+    const sigBoxHeight = 25; // Increased height
+    const dateColWidth = 25; // Very narrow column for date (tight padding)
+    const sigColWidth = (tableWidth - dateColWidth) / 3; // Remaining width split into 3
+
+    // Column 1 - Print date only (center aligned)
+    doc.setLineWidth(0.2);
+    doc.rect(marginLeft, finalY, dateColWidth, sigBoxHeight);
+
+    const now = new Date();
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const dayName = days[now.getDay()];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = months[now.getMonth()];
+    const year = now.getFullYear();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+
+    const dateColCenter = marginLeft + dateColWidth / 2;
+    doc.setFontSize(7);
+    doc.setFont('times', 'normal');
+    doc.text('Tanggal Cetak :', dateColCenter, finalY + 6, { align: 'center' });
+    doc.text(`${dayName}, ${day}-${month}-`, dateColCenter, finalY + 11, { align: 'center' });
+    doc.text(`${year} ${hours}:${minutes}:${seconds}`, dateColCenter, finalY + 16, { align: 'center' });
+
+    // Column 2 - Employee signature (center aligned)
+    const col2X = marginLeft + dateColWidth;
+    const col2Center = col2X + sigColWidth / 2;
+    doc.setLineWidth(0.2);
+    doc.rect(col2X, finalY, sigColWidth, sigBoxHeight);
+
+    doc.setFontSize(7.5);
+    doc.setFont('times', 'normal');
+    doc.text('Tanda Tangan Pegawai,', col2Center, finalY + 3, { align: 'center' });
+
+    // Add signature image if available (centered)
+    if (signatureImage) {
+      const imgWidth = 25;
+      const imgHeight = 10;
+      const imgX = col2Center - imgWidth / 2;
+      const imgY = finalY + 5;
+
+      try {
+        doc.addImage(signatureImage, 'PNG', imgX, imgY, imgWidth, imgHeight);
+      } catch (error) {
+        console.error('Error adding signature image:', error);
+      }
+    }
+
+    doc.setFont('times', 'normal');
+    doc.text(`( ${pdfConfig.employeeName || ''} )`, col2Center, finalY + 23, { align: 'center' });
+
+    // Column 3 - Checked by (center aligned)
+    const col3X = col2X + sigColWidth;
+    const col3Center = col3X + sigColWidth / 2;
+    doc.setLineWidth(0.2);
+    doc.rect(col3X, finalY, sigColWidth, sigBoxHeight);
+    doc.setFontSize(7.5);
+    doc.setFont('times', 'normal');
+    doc.text('Diperiksa Oleh :', col3Center, finalY + 3, { align: 'center' });
+    doc.text(`( ${pdfConfig.checkedBy || ''} )`, col3Center, finalY + 23, { align: 'center' });
+
+    // Column 4 - Approved by (center aligned)
+    const col4X = col3X + sigColWidth;
+    const col4Center = col4X + sigColWidth / 2;
+    doc.setLineWidth(0.2);
+    doc.rect(col4X, finalY, sigColWidth, sigBoxHeight);
+    doc.setFontSize(7.5);
+    doc.setFont('times', 'normal');
+    doc.text('Disetujui Oleh :', col4Center, finalY + 3, { align: 'center' });
+    doc.text(`( ${pdfConfig.approvedBy || ''} )`, col4Center, finalY + 23, { align: 'center' });
+
+    // Use custom filename if provided, otherwise use original filename
+    const outputFileName = pdfConfig.fileName
+      ? `${pdfConfig.fileName}.pdf`
+      : fileName.replace(/\.(xlsx|xls)$/i, '_BPS_Format.pdf');
     doc.save(outputFileName);
   };
 
@@ -240,7 +358,9 @@ export default function GreatDayToBpsPdfPage() {
     setFileName('');
     setError('');
     setEmployeeStats(null);
-    setPdfConfig({ employeeName: '', checkedBy: '', approvedBy: '' });
+    setSignatureImage(null);
+    setSignaturePreview(null);
+    setPdfConfig({ fileName: '', employeeName: '', checkedBy: '', approvedBy: '', justifikasi: '' });
   };
 
   return (
@@ -305,7 +425,19 @@ export default function GreatDayToBpsPdfPage() {
 
                   <div className="space-y-3">
                     <h3 className="font-semibold text-gray-800">PDF Configuration</h3>
-                    
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">PDF Filename</label>
+                      <input
+                        type="text"
+                        value={pdfConfig.fileName}
+                        onChange={(e) => setPdfConfig({ ...pdfConfig, fileName: e.target.value })}
+                        placeholder="e.g., Attendance Report December"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Leave empty to use original filename</p>
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Employee Name</label>
                       <input
@@ -315,6 +447,46 @@ export default function GreatDayToBpsPdfPage() {
                         placeholder="Auto-detected from file"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Employee Signature (Tanda Tangan Karyawan)</label>
+                      {!signaturePreview ? (
+                        <label className="cursor-pointer">
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-green-400 transition-all text-center">
+                            <ImageIcon className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+                            <p className="text-sm text-gray-600 mb-1">Upload signature image</p>
+                            <p className="text-xs text-gray-500">PNG, JPG (Recommended: transparent PNG)</p>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleSignatureUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      ) : (
+                        <div className="relative border border-gray-300 rounded-lg p-3 bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={signaturePreview}
+                              alt="Signature preview"
+                              className="h-16 w-auto object-contain bg-white border border-gray-200 rounded px-2"
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-700">Signature uploaded</p>
+                              <p className="text-xs text-gray-500">Will appear above employee name</p>
+                            </div>
+                            <button
+                              onClick={removeSignature}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                              aria-label="Remove signature"
+                            >
+                              <X className="w-5 h-5 text-red-600" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -339,12 +511,24 @@ export default function GreatDayToBpsPdfPage() {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Justifikasi</label>
+                      <textarea
+                        value={pdfConfig.justifikasi}
+                        onChange={(e) => setPdfConfig({ ...pdfConfig, justifikasi: e.target.value })}
+                        placeholder="Enter justification text (optional)"
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900 resize-none"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">This text will appear in the Justifikasi box</p>
+                    </div>
+
                     <button
                       onClick={generatePDF}
                       className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
                     >
                       <Download className="w-5 h-5" />
-                      Download BPS Format PDF
+                      Download PDF
                     </button>
                   </div>
                 </div>
@@ -380,7 +564,7 @@ export default function GreatDayToBpsPdfPage() {
                       {attendanceData.slice(3, 23).map((row, rowIndex) => (
                         <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           {row.map((cell, cellIndex) => (
-                            <td key={cellIndex} className="px-2 py-2 whitespace-nowrap">
+                            <td key={cellIndex} className="px-2 py-2 whitespace-nowrap text-gray-900">
                               {cell || ''}
                             </td>
                           ))}
@@ -402,18 +586,6 @@ export default function GreatDayToBpsPdfPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Features */}
-          <div className="mt-6 bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-3">PDF Output Features</h3>
-            <ul className="list-disc list-inside space-y-2 text-gray-600">
-              <li>Complete attendance table with BPS format headers</li>
-              <li>Automatic justification section for remarks (WFH, Cuti, etc.)</li>
-              <li>Signature section with employee, checker, and approver fields</li>
-              <li>Declaration statement and print date</li>
-              <li>Professional landscape layout optimized for printing</li>
-            </ul>
           </div>
         </div>
       </div>
