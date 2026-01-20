@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { UploadCloud, Download, FileText, X, CheckCircle, Image as ImageIcon } from 'lucide-react';
+import { UploadCloud, Download, FileText, X, CheckCircle, Image as ImageIcon, ShoppingCart } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { createModuleLogger } from '@/lib/logger';
+import { useUserData } from '@/context/UserDataContext';
+import { usePdfCart } from '@/context/PdfCartContext';
+
+// Initialize logger for this module
+const log = createModuleLogger('csv-to-pdf');
 
 // Field mapping configuration - defines which CSV fields to include and their display names
 const FIELD_MAPPING = [
@@ -73,6 +79,9 @@ const mapCsvDataToFields = (csvData, fieldMapping) => {
 };
 
 export default function CsvToPdfPage() {
+  const { userData, updateField, isLoaded } = useUserData();
+  const { addToCart, cartCount } = usePdfCart();
+  const [addedToCart, setAddedToCart] = useState(false);
   const [csvData, setCsvData] = useState(null);
   const [fileName, setFileName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -87,10 +96,44 @@ export default function CsvToPdfPage() {
     teamLeader: ''
   });
 
+  // Load shared user data when context is ready
+  useEffect(() => {
+    if (isLoaded) {
+      log.info('Loading shared user data into form');
+      setPdfConfig(prev => ({
+        ...prev,
+        employeeName: userData.employeeName || prev.employeeName,
+        teamLeader: userData.teamLeader || prev.teamLeader
+      }));
+      if (userData.signatureImage) {
+        setSignatureImage(userData.signatureImage);
+        setSignaturePreview(userData.signatureImage);
+      }
+    }
+  }, [isLoaded, userData.employeeName, userData.teamLeader, userData.signatureImage]);
+
+  // Update shared state when employee name changes
+  const handleEmployeeNameChange = (value) => {
+    setPdfConfig(prev => ({ ...prev, employeeName: value }));
+    updateField('employeeName', value);
+  };
+
+  // Update shared state when team leader changes
+  const handleTeamLeaderChange = (value) => {
+    setPdfConfig(prev => ({ ...prev, teamLeader: value }));
+    updateField('teamLeader', value);
+  };
+
   const handleFileUpload = (file) => {
-    if (!file) return;
+    if (!file) {
+      log.debug('No file provided to handleFileUpload');
+      return;
+    }
+
+    log.info({ fileName: file.name, fileSize: file.size, fileType: file.type }, 'File upload initiated');
 
     if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+      log.warn({ fileName: file.name, fileType: file.type }, 'Invalid file type uploaded');
       setError('Please upload a valid CSV file');
       return;
     }
@@ -101,15 +144,22 @@ export default function CsvToPdfPage() {
     Papa.parse(file, {
       complete: (results) => {
         if (results.data && results.data.length > 0) {
+          log.info({
+            rowCount: results.data.length,
+            columnCount: results.data[0]?.length || 0,
+            fileName: file.name
+          }, 'CSV file parsed successfully');
           setCsvData(results.data);
 
           // Since we always map to 21 columns, always use landscape orientation
           setPdfConfig(prev => ({ ...prev, orientation: 'landscape' }));
         } else {
+          log.warn({ fileName: file.name }, 'CSV file is empty');
           setError('CSV file is empty');
         }
       },
       error: (error) => {
+        log.error({ error: error.message, fileName: file.name }, 'Error parsing CSV file');
         setError('Error parsing CSV file: ' + error.message);
       }
     });
@@ -117,10 +167,16 @@ export default function CsvToPdfPage() {
 
   const handleSignatureUpload = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) {
+      log.debug('No signature file provided');
+      return;
+    }
+
+    log.info({ fileName: file.name, fileSize: file.size, fileType: file.type }, 'Signature upload initiated');
 
     // Check if file is an image
     if (!file.type.startsWith('image/')) {
+      log.warn({ fileName: file.name, fileType: file.type }, 'Invalid signature file type');
       setError('Please upload a valid image file (PNG, JPG, etc.)');
       return;
     }
@@ -128,8 +184,14 @@ export default function CsvToPdfPage() {
     // Create preview
     const reader = new FileReader();
     reader.onload = (event) => {
+      log.info({ fileName: file.name }, 'Signature image loaded successfully');
       setSignaturePreview(event.target.result);
       setSignatureImage(event.target.result);
+      // Save to shared state
+      updateField('signatureImage', event.target.result);
+    };
+    reader.onerror = (error) => {
+      log.error({ error: error, fileName: file.name }, 'Error reading signature file');
     };
     reader.readAsDataURL(file);
     setError('');
@@ -138,6 +200,8 @@ export default function CsvToPdfPage() {
   const removeSignature = () => {
     setSignatureImage(null);
     setSignaturePreview(null);
+    // Clear from shared state
+    updateField('signatureImage', null);
   };
 
   const handleDragOver = (e) => {
@@ -163,32 +227,51 @@ export default function CsvToPdfPage() {
   };
 
   const generatePDF = () => {
-    if (!csvData || csvData.length === 0) return;
+    log.info({ config: pdfConfig }, 'PDF generation started');
 
-    const doc = new jsPDF({
-      orientation: pdfConfig.orientation,
-      unit: 'mm',
-      format: 'a4'
-    });
-    
-    const pageWidth = pdfConfig.orientation === 'landscape' ? 297 : 210;
-    const pageHeight = pdfConfig.orientation === 'landscape' ? 210 : 297;
-
-    // Start table at the very top of the page
-    let yPosition = 5;
-
-    // Filter out completely empty rows
-    const filteredData = csvData.filter(row =>
-      row.some(cell => cell && cell.toString().trim() !== '')
-    );
-
-    if (filteredData.length === 0) {
-      setError('No valid data to export');
+    if (!csvData || csvData.length === 0) {
+      log.warn('No CSV data available for PDF generation');
       return;
     }
 
-    // Map CSV data to defined fields
-    const { headers: filteredHeaders, body } = mapCsvDataToFields(filteredData, FIELD_MAPPING);
+    try {
+      const doc = new jsPDF({
+        orientation: pdfConfig.orientation,
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = pdfConfig.orientation === 'landscape' ? 297 : 210;
+      const pageHeight = pdfConfig.orientation === 'landscape' ? 210 : 297;
+
+      log.debug({ pageWidth, pageHeight, orientation: pdfConfig.orientation }, 'PDF document created');
+
+      // Start table at the very top of the page
+      let yPosition = 5;
+
+      // Filter out completely empty rows
+      const filteredData = csvData.filter(row =>
+        row.some(cell => cell && cell.toString().trim() !== '')
+      );
+
+      log.debug({
+        originalRows: csvData.length,
+        filteredRows: filteredData.length
+      }, 'Data filtered for empty rows');
+
+      if (filteredData.length === 0) {
+        log.warn('No valid data to export after filtering');
+        setError('No valid data to export');
+        return;
+      }
+
+      // Map CSV data to defined fields
+      const { headers: filteredHeaders, body } = mapCsvDataToFields(filteredData, FIELD_MAPPING);
+
+      log.debug({
+        headerCount: filteredHeaders.length,
+        bodyRows: body.length
+      }, 'Data mapped to defined fields');
 
     // Table configuration - More vertical spacing and better readability
     const tableStartY = yPosition;
@@ -272,18 +355,20 @@ export default function CsvToPdfPage() {
     
     // Add signature image if available - positioned with more space from text
     if (signatureImage) {
+      log.debug('Adding signature image to PDF');
       const imgWidth = 30;
       const imgHeight = 10;
       const imgX = leftSignatureCenter - (imgWidth / 2);
       const imgY = signatureY + 4; // Increased from +2 to +4 for more space
-      
+
       try {
         doc.addImage(signatureImage, 'PNG', imgX, imgY, imgWidth, imgHeight);
-      } catch (error) {
-        console.error('Error adding signature image:', error);
+        log.info('Signature image added successfully');
+      } catch (imgError) {
+        log.error({ error: imgError.message }, 'Error adding signature image');
       }
     }
-    
+
     // Signature line - positioned lower to accommodate signature image
     doc.line(leftSignatureX, signatureY + 16, leftSignatureX + signatureWidth, signatureY + 16); // Changed from +12 to +16
     doc.text(pdfConfig.employeeName || '_________________', leftSignatureCenter, signatureY + 21, { align: 'center' }); // Changed from +17 to +21
@@ -300,10 +385,39 @@ export default function CsvToPdfPage() {
     const pdfFileName = pdfConfig.title
       ? `${pdfConfig.title}.pdf`
       : fileName.replace('.csv', '.pdf') || 'timesheet.pdf';
-    doc.save(pdfFileName);
+
+      log.info({
+        pdfFileName,
+        totalPages: doc.internal.getNumberOfPages(),
+        dataRows: body.length
+      }, 'PDF generated successfully');
+
+      // Get PDF as base64 for cart storage
+      const pdfBase64 = doc.output('datauristring');
+      const pdfBlob = doc.output('blob');
+
+      // Add to cart
+      addToCart({
+        name: pdfFileName,
+        data: pdfBase64,
+        size: (pdfBlob.size / 1024).toFixed(2) + ' KB',
+        source: 'csv-to-pdf'
+      });
+
+      // Show added to cart feedback
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 3000);
+
+      // Also download the file
+      doc.save(pdfFileName);
+    } catch (error) {
+      log.error({ error: error.message, stack: error.stack }, 'Error generating PDF');
+      setError('Error generating PDF: ' + error.message);
+    }
   };
 
   const clearFile = () => {
+    log.info('Clearing file and resetting form');
     setCsvData(null);
     setFileName('');
     setError('');
@@ -419,12 +533,11 @@ export default function CsvToPdfPage() {
                       <input
                         type="text"
                         value={pdfConfig.employeeName}
-                        onChange={(e) =>
-                          setPdfConfig({ ...pdfConfig, employeeName: e.target.value })
-                        }
+                        onChange={(e) => handleEmployeeNameChange(e.target.value)}
                         placeholder="Enter employee name"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
+                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
                     </div>
 
                     <div>
@@ -455,7 +568,7 @@ export default function CsvToPdfPage() {
                             />
                             <div className="flex-1">
                               <p className="text-sm font-medium text-gray-700">Signature uploaded</p>
-                              <p className="text-xs text-gray-500">Will appear above employee name</p>
+                              <p className="text-xs text-gray-500">Auto-saved across all pages</p>
                             </div>
                             <button
                               onClick={removeSignature}
@@ -476,12 +589,11 @@ export default function CsvToPdfPage() {
                       <input
                         type="text"
                         value={pdfConfig.teamLeader}
-                        onChange={(e) =>
-                          setPdfConfig({ ...pdfConfig, teamLeader: e.target.value })
-                        }
+                        onChange={(e) => handleTeamLeaderChange(e.target.value)}
                         placeholder="Enter team leader name"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
+                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
                     </div>
 
                     <div>
@@ -517,7 +629,7 @@ export default function CsvToPdfPage() {
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                       />
-                      <p className="text-xs text-gray-500 mt-1">Default is 3pt to match BATM template. Increase to 4-5pt if text is too small.</p>
+                      <p className="text-xs text-gray-500 mt-1">Default is 3pt to match the template. Increase to 4-5pt if text is too small.</p>
                     </div>
 
                     <button
@@ -525,8 +637,22 @@ export default function CsvToPdfPage() {
                       className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
                     >
                       <Download className="w-5 h-5" />
-                      Download PDF
+                      Download PDF & Add to Merge
                     </button>
+
+                    {addedToCart && (
+                      <div className="flex items-center justify-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700">
+                        <ShoppingCart className="w-4 h-4" />
+                        <span className="text-sm">Added to Merge PDF cart!</span>
+                      </div>
+                    )}
+
+                    {cartCount > 0 && (
+                      <div className="text-center text-sm text-gray-600">
+                        <ShoppingCart className="w-4 h-4 inline mr-1" />
+                        {cartCount} PDF{cartCount !== 1 ? 's' : ''} in merge cart
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

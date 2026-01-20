@@ -1,31 +1,63 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PDFDocument } from 'pdf-lib';
-import { UploadCloud, Download, Combine, X, FileText, GripVertical } from 'lucide-react';
+import { UploadCloud, Download, Combine, X, FileText, GripVertical, ShoppingCart, Trash2 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { createModuleLogger } from '@/lib/logger';
+import { usePdfCart } from '@/context/PdfCartContext';
+
+// Initialize logger for this module
+const log = createModuleLogger('merge-pdf');
 
 export default function MergePdfPage() {
-  const [pdfFiles, setPdfFiles] = useState([]);
+  const { cartItems, cartCount, isLoaded, removeFromCart, clearCart, moveItem } = usePdfCart();
+  const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [mergedFileName, setMergedFileName] = useState('merged_document.pdf');
 
+  // Combined list of cart items and uploaded files for display
+  const allFiles = [
+    ...cartItems.map(item => ({
+      id: item.id,
+      name: item.name,
+      size: item.size,
+      source: item.source,
+      isCartItem: true,
+      data: item.data
+    })),
+    ...uploadedFiles.map(file => ({
+      ...file,
+      isCartItem: false
+    }))
+  ];
+
   const handleFileUpload = (files) => {
+    log.info({ fileCount: files.length }, 'PDF files upload initiated');
+
     const validFiles = Array.from(files).filter(file => file.type === 'application/pdf');
-    
+
     if (validFiles.length === 0) {
+      log.warn({ uploadedCount: files.length }, 'No valid PDF files in upload');
       setError('Please upload valid PDF files');
       return;
     }
 
+    log.info({
+      validFiles: validFiles.length,
+      invalidFiles: files.length - validFiles.length,
+      fileNames: validFiles.map(f => f.name)
+    }, 'PDF files validated');
+
     setError('');
-    setPdfFiles(prev => [...prev, ...validFiles.map((file, index) => ({
+    setUploadedFiles(prev => [...prev, ...validFiles.map((file, index) => ({
       id: Date.now() + index,
       file: file,
       name: file.name,
-      size: (file.size / 1024).toFixed(2) + ' KB'
+      size: (file.size / 1024).toFixed(2) + ' KB',
+      source: 'manual-upload'
     }))]);
   };
 
@@ -49,18 +81,36 @@ export default function MergePdfPage() {
     handleFileUpload(e.target.files);
   };
 
-  const removeFile = (id) => {
-    setPdfFiles(prev => prev.filter(file => file.id !== id));
+  const removeFile = (id, isCartItem) => {
+    if (isCartItem) {
+      const fileToRemove = cartItems.find(f => f.id === id);
+      log.info({ fileName: fileToRemove?.name, fileId: id, type: 'cart' }, 'Removing cart item');
+      removeFromCart(id);
+    } else {
+      const fileToRemove = uploadedFiles.find(f => f.id === id);
+      log.info({ fileName: fileToRemove?.name, fileId: id, type: 'uploaded' }, 'Removing uploaded file');
+      setUploadedFiles(prev => prev.filter(file => file.id !== id));
+    }
   };
 
   const clearAllFiles = () => {
-    setPdfFiles([]);
+    log.info({ cartCount: cartItems.length, uploadedCount: uploadedFiles.length }, 'Clearing all files');
+    clearCart();
+    setUploadedFiles([]);
     setError('');
   };
 
   const mergePDFs = async () => {
-    if (pdfFiles.length < 2) {
-      setError('Please upload at least 2 PDF files to merge');
+    log.info({
+      cartCount: cartItems.length,
+      uploadedCount: uploadedFiles.length,
+      totalCount: allFiles.length,
+      outputFileName: mergedFileName
+    }, 'PDF merge started');
+
+    if (allFiles.length < 2) {
+      log.warn({ fileCount: allFiles.length }, 'Not enough files to merge');
+      setError('Please add at least 2 PDF files to merge');
       return;
     }
 
@@ -70,18 +120,39 @@ export default function MergePdfPage() {
     try {
       // Create a new PDF document
       const mergedPdf = await PDFDocument.create();
+      log.debug('Created new PDF document');
 
-      // Process each PDF file
-      for (const pdfFile of pdfFiles) {
-        const pdfBytes = await pdfFile.file.arrayBuffer();
+      // Process each PDF file (both cart items and uploaded files)
+      let totalPages = 0;
+      for (const pdfFile of allFiles) {
+        log.debug({ fileName: pdfFile.name, isCartItem: pdfFile.isCartItem }, 'Processing PDF file');
+
+        let pdfBytes;
+        if (pdfFile.isCartItem) {
+          // Cart items have base64 data URI
+          const base64Data = pdfFile.data.split(',')[1]; // Remove data URI prefix
+          pdfBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        } else {
+          // Uploaded files have File objects
+          pdfBytes = await pdfFile.file.arrayBuffer();
+        }
+
         const pdf = await PDFDocument.load(pdfBytes);
         const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
         copiedPages.forEach((page) => mergedPdf.addPage(page));
+        totalPages += copiedPages.length;
+        log.debug({ fileName: pdfFile.name, pageCount: copiedPages.length }, 'Pages copied from PDF');
       }
 
       // Save the merged PDF
       const mergedPdfBytes = await mergedPdf.save();
-      
+
+      log.info({
+        totalPages,
+        fileSize: (mergedPdfBytes.length / 1024).toFixed(2) + ' KB',
+        outputFileName: mergedFileName
+      }, 'PDF merge completed successfully');
+
       // Create download link
       const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
@@ -89,27 +160,53 @@ export default function MergePdfPage() {
       link.href = url;
       link.download = mergedFileName.endsWith('.pdf') ? mergedFileName : `${mergedFileName}.pdf`;
       link.click();
-      
+
       // Cleanup
       URL.revokeObjectURL(url);
-      
+
       setError('');
     } catch (err) {
+      log.error({ error: err.message, stack: err.stack }, 'Error merging PDFs');
       setError('Error merging PDFs: ' + err.message);
-      console.error('Merge error:', err);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const moveFile = (index, direction) => {
-    const newFiles = [...pdfFiles];
+  // Move cart item up/down
+  const moveCartItem = (index, direction) => {
+    moveItem(index, direction);
+  };
+
+  // Move uploaded file up/down
+  const moveUploadedFile = (index, direction) => {
+    const newFiles = [...uploadedFiles];
     const newIndex = direction === 'up' ? index - 1 : index + 1;
-    
-    if (newIndex < 0 || newIndex >= pdfFiles.length) return;
-    
+
+    if (newIndex < 0 || newIndex >= uploadedFiles.length) return;
+
     [newFiles[index], newFiles[newIndex]] = [newFiles[newIndex], newFiles[index]];
-    setPdfFiles(newFiles);
+    setUploadedFiles(newFiles);
+  };
+
+  // Helper to get source label
+  const getSourceLabel = (source) => {
+    switch (source) {
+      case 'csv-to-pdf': return 'CSV to PDF';
+      case 'greatday-to-pdf': return 'Great Day';
+      case 'manual-upload': return 'Uploaded';
+      default: return 'Unknown';
+    }
+  };
+
+  // Helper to get source color
+  const getSourceColor = (source) => {
+    switch (source) {
+      case 'csv-to-pdf': return 'bg-blue-100 text-blue-700';
+      case 'greatday-to-pdf': return 'bg-green-100 text-green-700';
+      case 'manual-upload': return 'bg-gray-100 text-gray-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
   };
 
   return (
@@ -117,11 +214,17 @@ export default function MergePdfPage() {
       <div className="p-4 sm:p-8">
         <div className="max-w-6xl mx-auto">
           <header className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-3">
               Merge PDF Files
+              {cartCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 text-sm font-medium bg-purple-100 text-purple-700 rounded-full">
+                  <ShoppingCart className="w-4 h-4" />
+                  {cartCount} in cart
+                </span>
+              )}
             </h1>
             <p className="text-gray-600">
-              Upload multiple PDF files and merge them into a single document
+              Generated PDFs from other pages appear here automatically. You can also upload additional files.
             </p>
           </header>
 
@@ -166,16 +269,22 @@ export default function MergePdfPage() {
                 </label>
               </div>
 
-              {pdfFiles.length > 0 && (
+              {allFiles.length > 0 && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-gray-800">
-                      {pdfFiles.length} file{pdfFiles.length !== 1 ? 's' : ''} selected
+                      {allFiles.length} file{allFiles.length !== 1 ? 's' : ''} ready
+                      {cartCount > 0 && uploadedFiles.length > 0 && (
+                        <span className="text-sm text-gray-500 font-normal ml-2">
+                          ({cartCount} from cart, {uploadedFiles.length} uploaded)
+                        </span>
+                      )}
                     </h3>
                     <button
                       onClick={clearAllFiles}
-                      className="text-sm text-red-600 hover:text-red-700"
+                      className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
                     >
+                      <Trash2 className="w-4 h-4" />
                       Clear All
                     </button>
                   </div>
@@ -194,7 +303,7 @@ export default function MergePdfPage() {
 
                   <button
                     onClick={mergePDFs}
-                    disabled={pdfFiles.length < 2 || isProcessing}
+                    disabled={allFiles.length < 2 || isProcessing}
                     className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isProcessing ? (
@@ -232,57 +341,128 @@ export default function MergePdfPage() {
                 Files to Merge
               </h2>
 
-              {pdfFiles.length > 0 ? (
-                <div className="space-y-2">
+              {allFiles.length > 0 ? (
+                <div className="space-y-4">
                   <p className="text-sm text-gray-600 mb-3">
-                    Drag files to reorder • Files will be merged in this order
+                    Files will be merged in this order (cart items first, then uploaded files)
                   </p>
-                  {pdfFiles.map((file, index) => (
-                    <div
-                      key={file.id}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-purple-300 transition-colors"
-                    >
-                      <div className="flex flex-col gap-1">
-                        <button
-                          onClick={() => moveFile(index, 'up')}
-                          disabled={index === 0}
-                          className="text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                          aria-label="Move up"
+
+                  {/* Cart Items Section */}
+                  {cartItems.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                        <ShoppingCart className="w-4 h-4" />
+                        From Cart ({cartItems.length})
+                      </h3>
+                      {cartItems.map((item, index) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg border border-purple-200 hover:border-purple-300 transition-colors"
                         >
-                          <GripVertical className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => moveFile(index, 'down')}
-                          disabled={index === pdfFiles.length - 1}
-                          className="text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                          aria-label="Move down"
-                        >
-                          <GripVertical className="w-4 h-4" />
-                        </button>
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-800 truncate">
-                          {index + 1}. {file.name}
-                        </p>
-                        <p className="text-sm text-gray-600">{file.size}</p>
-                      </div>
-                      
-                      <button
-                        onClick={() => removeFile(file.id)}
-                        className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                        aria-label="Remove file"
-                      >
-                        <X className="w-5 h-5 text-red-600" />
-                      </button>
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={() => moveCartItem(index, 'up')}
+                              disabled={index === 0}
+                              className="text-purple-400 hover:text-purple-600 disabled:opacity-30"
+                              aria-label="Move up"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => moveCartItem(index, 'down')}
+                              disabled={index === cartItems.length - 1}
+                              className="text-purple-400 hover:text-purple-600 disabled:opacity-30"
+                              aria-label="Move down"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-gray-800 truncate">
+                                {index + 1}. {item.name}
+                              </p>
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getSourceColor(item.source)}`}>
+                                {getSourceLabel(item.source)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">{item.size}</p>
+                          </div>
+
+                          <button
+                            onClick={() => removeFile(item.id, true)}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            aria-label="Remove from cart"
+                          >
+                            <X className="w-5 h-5 text-red-600" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+
+                  {/* Uploaded Files Section */}
+                  {uploadedFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                        <UploadCloud className="w-4 h-4" />
+                        Uploaded Files ({uploadedFiles.length})
+                      </h3>
+                      {uploadedFiles.map((file, index) => (
+                        <div
+                          key={file.id}
+                          className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-purple-300 transition-colors"
+                        >
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={() => moveUploadedFile(index, 'up')}
+                              disabled={index === 0}
+                              className="text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                              aria-label="Move up"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => moveUploadedFile(index, 'down')}
+                              disabled={index === uploadedFiles.length - 1}
+                              className="text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                              aria-label="Move down"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-gray-800 truncate">
+                                {cartItems.length + index + 1}. {file.name}
+                              </p>
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getSourceColor(file.source)}`}>
+                                {getSourceLabel(file.source)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">{file.size}</p>
+                          </div>
+
+                          <button
+                            onClick={() => removeFile(file.id, false)}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            aria-label="Remove file"
+                          >
+                            <X className="w-5 h-5 text-red-600" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-16 text-gray-400">
                   <Combine className="w-16 h-16 mx-auto mb-4 opacity-50" />
                   <p>No PDF files added</p>
-                  <p className="text-sm mt-2">Upload at least 2 files to merge</p>
+                  <p className="text-sm mt-2">Generate PDFs from CSV to PDF or Great Day to PDF,</p>
+                  <p className="text-sm">or upload files manually</p>
                 </div>
               )}
             </div>

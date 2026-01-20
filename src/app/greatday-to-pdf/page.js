@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { UploadCloud, Download, FileSpreadsheet, X, CheckCircle, User, Image as ImageIcon } from 'lucide-react';
+import { UploadCloud, Download, FileSpreadsheet, X, CheckCircle, User, Image as ImageIcon, ShoppingCart } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { createModuleLogger } from '@/lib/logger';
+import { useUserData } from '@/context/UserDataContext';
+import { usePdfCart } from '@/context/PdfCartContext';
+
+// Initialize logger for this module
+const log = createModuleLogger('greatday-to-pdf');
 
 // Field mapping configuration - defines which Excel fields to include and their display names
 const FIELD_MAPPING = [
@@ -74,6 +80,9 @@ const mapExcelDataToFields = (excelData, fieldMapping) => {
 };
 
 export default function GreatDayToBpsPdfPage() {
+  const { userData, updateField, updateFields, isLoaded } = useUserData();
+  const { addToCart, cartCount } = usePdfCart();
+  const [addedToCart, setAddedToCart] = useState(false);
   const [attendanceData, setAttendanceData] = useState(null);
   const [fileName, setFileName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -89,13 +98,54 @@ export default function GreatDayToBpsPdfPage() {
     justifikasi: ''
   });
 
+  // Load shared user data when context is ready
+  useEffect(() => {
+    if (isLoaded) {
+      log.info('Loading shared user data into form');
+      setPdfConfig(prev => ({
+        ...prev,
+        employeeName: userData.employeeName || prev.employeeName,
+        checkedBy: userData.checkedBy || userData.teamLeader || prev.checkedBy,
+        approvedBy: userData.approvedBy || prev.approvedBy
+      }));
+      if (userData.signatureImage) {
+        setSignatureImage(userData.signatureImage);
+        setSignaturePreview(userData.signatureImage);
+      }
+    }
+  }, [isLoaded, userData.employeeName, userData.teamLeader, userData.checkedBy, userData.approvedBy, userData.signatureImage]);
+
+  // Update shared state when employee name changes
+  const handleEmployeeNameChange = (value) => {
+    setPdfConfig(prev => ({ ...prev, employeeName: value }));
+    updateField('employeeName', value);
+  };
+
+  // Update shared state when checked by changes
+  const handleCheckedByChange = (value) => {
+    setPdfConfig(prev => ({ ...prev, checkedBy: value }));
+    updateFields({ checkedBy: value, teamLeader: value });
+  };
+
+  // Update shared state when approved by changes
+  const handleApprovedByChange = (value) => {
+    setPdfConfig(prev => ({ ...prev, approvedBy: value }));
+    updateField('approvedBy', value);
+  };
+
   const handleFileUpload = (file) => {
-    if (!file) return;
+    if (!file) {
+      log.debug('No file provided to handleFileUpload');
+      return;
+    }
+
+    log.info({ fileName: file.name, fileSize: file.size, fileType: file.type }, 'Excel file upload initiated');
 
     const validExtensions = ['.xlsx', '.xls'];
     const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    
+
     if (!validExtensions.includes(fileExtension)) {
+      log.warn({ fileName: file.name, fileExtension }, 'Invalid file type uploaded');
       setError('Please upload a valid Excel file (.xlsx or .xls) from Great Day');
       return;
     }
@@ -106,44 +156,66 @@ export default function GreatDayToBpsPdfPage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
+        log.debug('Reading Excel file data');
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
+
         if (jsonData && jsonData.length > 3) {
+          log.info({
+            rowCount: jsonData.length,
+            sheetName,
+            fileName: file.name
+          }, 'Excel file parsed successfully');
           setAttendanceData(jsonData);
           calculateStats(jsonData);
           extractEmployeeData(jsonData);
         } else {
+          log.warn({ fileName: file.name, rowCount: jsonData?.length || 0 }, 'Excel file is empty or invalid');
           setError('Excel file appears to be empty or invalid');
         }
       } catch (err) {
+        log.error({ error: err.message, fileName: file.name }, 'Error reading Excel file');
         setError('Error reading Excel file: ' + err.message);
       }
     };
-    
-    reader.onerror = () => setError('Error reading file');
+
+    reader.onerror = () => {
+      log.error({ fileName: file.name }, 'FileReader error reading file');
+      setError('Error reading file');
+    };
     reader.readAsArrayBuffer(file);
   };
 
   const extractEmployeeData = (data) => {
     if (data.length > 3) {
       const firstDataRow = data[3];
-      setPdfConfig(prev => ({
-        ...prev,
-        employeeName: firstDataRow[2] || ''
-      }));
+      const employeeName = firstDataRow[2] || '';
+      // Only update if we don't have an employee name yet (don't overwrite user's saved data)
+      if (!userData.employeeName && employeeName) {
+        setPdfConfig(prev => ({
+          ...prev,
+          employeeName: employeeName
+        }));
+        updateField('employeeName', employeeName);
+      }
     }
   };
 
   const handleSignatureUpload = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) {
+      log.debug('No signature file provided');
+      return;
+    }
+
+    log.info({ fileName: file.name, fileSize: file.size, fileType: file.type }, 'Signature upload initiated');
 
     // Check if file is an image
     if (!file.type.startsWith('image/')) {
+      log.warn({ fileName: file.name, fileType: file.type }, 'Invalid signature file type');
       setError('Please upload a valid image file (PNG, JPG, etc.)');
       return;
     }
@@ -151,8 +223,14 @@ export default function GreatDayToBpsPdfPage() {
     // Create preview
     const reader = new FileReader();
     reader.onload = (event) => {
+      log.info({ fileName: file.name }, 'Signature image loaded successfully');
       setSignaturePreview(event.target.result);
       setSignatureImage(event.target.result);
+      // Save to shared state
+      updateField('signatureImage', event.target.result);
+    };
+    reader.onerror = (error) => {
+      log.error({ error: error, fileName: file.name }, 'Error reading signature file');
     };
     reader.readAsDataURL(file);
     setError('');
@@ -161,6 +239,8 @@ export default function GreatDayToBpsPdfPage() {
   const removeSignature = () => {
     setSignatureImage(null);
     setSignaturePreview(null);
+    // Clear from shared state
+    updateField('signatureImage', null);
   };
 
   const calculateStats = (data) => {
@@ -205,22 +285,30 @@ export default function GreatDayToBpsPdfPage() {
   };
 
   const generatePDF = () => {
+    log.info({ config: pdfConfig }, 'PDF generation started');
+
     if (!attendanceData || attendanceData.length === 0) {
+      log.warn('No attendance data available for PDF generation');
       setError('No data to export');
       return;
     }
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
 
-    // Title
-    doc.setFontSize(7);
-    doc.setFont('times', 'bold');
-    doc.text('Attendance Report', pageWidth / 2, 14, { align: 'center' });
+      log.debug({ pageWidth, pageHeight }, 'PDF document created');
 
-    // Prepare table data using field mapping
-    const { headers, body: dataRows } = mapExcelDataToFields(attendanceData, FIELD_MAPPING);
+      // Title
+      doc.setFontSize(7);
+      doc.setFont('times', 'bold');
+      doc.text('Attendance Report', pageWidth / 2, 14, { align: 'center' });
+
+      // Prepare table data using field mapping
+      const { headers, body: dataRows } = mapExcelDataToFields(attendanceData, FIELD_MAPPING);
+
+      log.debug({ headerCount: headers.length, dataRows: dataRows.length }, 'Data mapped to defined fields');
 
     // Main table - adjusted for portrait orientation
     doc.autoTable({
@@ -358,6 +446,7 @@ export default function GreatDayToBpsPdfPage() {
 
     // Add signature image if available (centered)
     if (signatureImage) {
+      log.debug('Adding signature image to PDF');
       const imgWidth = 25;
       const imgHeight = 10;
       const imgX = col2Center - imgWidth / 2;
@@ -365,8 +454,9 @@ export default function GreatDayToBpsPdfPage() {
 
       try {
         doc.addImage(signatureImage, 'PNG', imgX, imgY, imgWidth, imgHeight);
-      } catch (error) {
-        console.error('Error adding signature image:', error);
+        log.info('Signature image added successfully');
+      } catch (imgError) {
+        log.error({ error: imgError.message }, 'Error adding signature image');
       }
     }
 
@@ -397,10 +487,38 @@ export default function GreatDayToBpsPdfPage() {
     const outputFileName = pdfConfig.fileName
       ? `${pdfConfig.fileName}.pdf`
       : fileName.replace(/\.(xlsx|xls)$/i, '_BPS_Format.pdf');
-    doc.save(outputFileName);
+
+      log.info({
+        outputFileName,
+        dataRows: dataRows.length
+      }, 'PDF generated successfully');
+
+      // Get PDF as base64 for cart storage
+      const pdfBase64 = doc.output('datauristring');
+      const pdfBlob = doc.output('blob');
+
+      // Add to cart
+      addToCart({
+        name: outputFileName,
+        data: pdfBase64,
+        size: (pdfBlob.size / 1024).toFixed(2) + ' KB',
+        source: 'greatday-to-pdf'
+      });
+
+      // Show added to cart feedback
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 3000);
+
+      // Also download the file
+      doc.save(outputFileName);
+    } catch (error) {
+      log.error({ error: error.message, stack: error.stack }, 'Error generating PDF');
+      setError('Error generating PDF: ' + error.message);
+    }
   };
 
   const clearFile = () => {
+    log.info('Clearing file and resetting form');
     setAttendanceData(null);
     setFileName('');
     setError('');
@@ -490,10 +608,11 @@ export default function GreatDayToBpsPdfPage() {
                       <input
                         type="text"
                         value={pdfConfig.employeeName}
-                        onChange={(e) => setPdfConfig({ ...pdfConfig, employeeName: e.target.value })}
+                        onChange={(e) => handleEmployeeNameChange(e.target.value)}
                         placeholder="Auto-detected from file"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
                       />
+                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
                     </div>
 
                     <div>
@@ -522,7 +641,7 @@ export default function GreatDayToBpsPdfPage() {
                             />
                             <div className="flex-1">
                               <p className="text-sm font-medium text-gray-700">Signature uploaded</p>
-                              <p className="text-xs text-gray-500">Will appear above employee name</p>
+                              <p className="text-xs text-gray-500">Auto-saved across all pages</p>
                             </div>
                             <button
                               onClick={removeSignature}
@@ -541,10 +660,11 @@ export default function GreatDayToBpsPdfPage() {
                       <input
                         type="text"
                         value={pdfConfig.checkedBy}
-                        onChange={(e) => setPdfConfig({ ...pdfConfig, checkedBy: e.target.value })}
+                        onChange={(e) => handleCheckedByChange(e.target.value)}
                         placeholder="e.g., ATHIANA NURUL"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
                       />
+                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages (synced with Team Leader)</p>
                     </div>
 
                     <div>
@@ -552,10 +672,11 @@ export default function GreatDayToBpsPdfPage() {
                       <input
                         type="text"
                         value={pdfConfig.approvedBy}
-                        onChange={(e) => setPdfConfig({ ...pdfConfig, approvedBy: e.target.value })}
+                        onChange={(e) => handleApprovedByChange(e.target.value)}
                         placeholder="e.g., ASWIN SWASTIKA"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
                       />
+                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
                     </div>
 
                     <div>
@@ -575,8 +696,22 @@ export default function GreatDayToBpsPdfPage() {
                       className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
                     >
                       <Download className="w-5 h-5" />
-                      Download PDF
+                      Download PDF & Add to Merge
                     </button>
+
+                    {addedToCart && (
+                      <div className="flex items-center justify-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700">
+                        <ShoppingCart className="w-4 h-4" />
+                        <span className="text-sm">Added to Merge PDF cart!</span>
+                      </div>
+                    )}
+
+                    {cartCount > 0 && (
+                      <div className="text-center text-sm text-gray-600">
+                        <ShoppingCart className="w-4 h-4 inline mr-1" />
+                        {cartCount} PDF{cartCount !== 1 ? 's' : ''} in merge cart
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
