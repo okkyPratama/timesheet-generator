@@ -270,7 +270,7 @@ export default function GreatDayToBpsPdfPage() {
   const handleDragLeave = (e) => {
     e.preventDefault();
     setIsDragging(false);
-  };
+  };        
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -486,7 +486,7 @@ export default function GreatDayToBpsPdfPage() {
     // Use custom filename if provided, otherwise use original filename
     const outputFileName = pdfConfig.fileName
       ? `${pdfConfig.fileName}.pdf`
-      : fileName.replace(/\.(xlsx|xls)$/i, '_BPS_Format.pdf');
+      : fileName.replace(/\.(xlsx|xls)$/i, '_Timesheet_Format.pdf');
 
       log.info({
         outputFileName,
@@ -534,187 +534,40 @@ export default function GreatDayToBpsPdfPage() {
         <div className="max-w-6xl mx-auto">
           <header className="mb-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              Great Day to BPS PDF Converter
+              Great Day Excel to PDF Converter
             </h1>
             <p className="text-gray-600">
-              Convert Great Day attendance exports to BPS format PDF with signature section
+              Convert Great Day attendance exports to Timesheet format PDF with signature section
             </p>
           </header>
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Upload Section */}
+          {/* Upload Section - Shown when no file */}
+          {!attendanceData ? (
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
                 <UploadCloud className="w-5 h-5 text-green-600" />
                 Upload Great Day Export
               </h2>
 
-              {!attendanceData ? (
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
-                    isDragging ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-green-400'
-                  }`}
-                >
-                  <FileSpreadsheet className={`w-16 h-16 mx-auto mb-4 ${isDragging ? 'text-green-500' : 'text-gray-400'}`} />
-                  <p className="text-gray-600 mb-2">Drag and drop Great Day Excel export here</p>
-                  <p className="text-gray-500 text-sm mb-4">or</p>
-                  <label className="inline-block">
-                    <input type="file" accept=".xlsx,.xls" onChange={handleFileInput} className="hidden" />
-                    <span className="bg-green-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-green-700 transition-colors inline-block">
-                      Browse Files
-                    </span>
-                  </label>
-                  <p className="text-xs text-gray-500 mt-4">Accepts: .xlsx, .xls files</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      <div>
-                        <p className="font-medium text-gray-800">{fileName}</p>
-                        {employeeStats && (
-                          <p className="text-sm text-gray-600">
-                            {employeeStats.totalRecords} records • {employeeStats.uniqueEmployees} employees
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <button onClick={clearFile} className="p-2 hover:bg-green-100 rounded-lg transition-colors">
-                      <X className="w-5 h-5 text-gray-600" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-gray-800">PDF Configuration</h3>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">PDF Filename</label>
-                      <input
-                        type="text"
-                        value={pdfConfig.fileName}
-                        onChange={(e) => setPdfConfig({ ...pdfConfig, fileName: e.target.value })}
-                        placeholder="e.g., Attendance Report December"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Leave empty to use original filename</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Employee Name</label>
-                      <input
-                        type="text"
-                        value={pdfConfig.employeeName}
-                        onChange={(e) => handleEmployeeNameChange(e.target.value)}
-                        placeholder="Auto-detected from file"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Employee Signature (Tanda Tangan Karyawan)</label>
-                      {!signaturePreview ? (
-                        <label className="cursor-pointer">
-                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-green-400 transition-all text-center">
-                            <ImageIcon className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                            <p className="text-sm text-gray-600 mb-1">Upload signature image</p>
-                            <p className="text-xs text-gray-500">PNG, JPG (Recommended: transparent PNG)</p>
-                          </div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleSignatureUpload}
-                            className="hidden"
-                          />
-                        </label>
-                      ) : (
-                        <div className="relative border border-gray-300 rounded-lg p-3 bg-gray-50">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={signaturePreview}
-                              alt="Signature preview"
-                              className="h-16 w-auto object-contain bg-white border border-gray-200 rounded px-2"
-                            />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-700">Signature uploaded</p>
-                              <p className="text-xs text-gray-500">Auto-saved across all pages</p>
-                            </div>
-                            <button
-                              onClick={removeSignature}
-                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                              aria-label="Remove signature"
-                            >
-                              <X className="w-5 h-5 text-red-600" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Checked By (Diperiksa Oleh)</label>
-                      <input
-                        type="text"
-                        value={pdfConfig.checkedBy}
-                        onChange={(e) => handleCheckedByChange(e.target.value)}
-                        placeholder="e.g., ATHIANA NURUL"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages (synced with Team Leader)</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Approved By (Disetujui Oleh)</label>
-                      <input
-                        type="text"
-                        value={pdfConfig.approvedBy}
-                        onChange={(e) => handleApprovedByChange(e.target.value)}
-                        placeholder="e.g., ASWIN SWASTIKA"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Justifikasi</label>
-                      <textarea
-                        value={pdfConfig.justifikasi}
-                        onChange={(e) => setPdfConfig({ ...pdfConfig, justifikasi: e.target.value })}
-                        placeholder="Enter justification text (optional)"
-                        rows={4}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900 resize-none"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">This text will appear in the Justifikasi box</p>
-                    </div>
-
-                    <button
-                      onClick={generatePDF}
-                      className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                    >
-                      <Download className="w-5 h-5" />
-                      Download PDF & Add to Merge
-                    </button>
-
-                    {addedToCart && (
-                      <div className="flex items-center justify-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700">
-                        <ShoppingCart className="w-4 h-4" />
-                        <span className="text-sm">Added to Merge PDF cart!</span>
-                      </div>
-                    )}
-
-                    {cartCount > 0 && (
-                      <div className="text-center text-sm text-gray-600">
-                        <ShoppingCart className="w-4 h-4 inline mr-1" />
-                        {cartCount} PDF{cartCount !== 1 ? 's' : ''} in merge cart
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                  isDragging ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-green-400'
+                }`}
+              >
+                <FileSpreadsheet className={`w-16 h-16 mx-auto mb-4 ${isDragging ? 'text-green-500' : 'text-gray-400'}`} />
+                <p className="text-gray-600 mb-2">Drag and drop Great Day Excel export here</p>
+                <p className="text-gray-500 text-sm mb-4">or</p>
+                <label className="inline-block">
+                  <input type="file" accept=".xlsx,.xls" onChange={handleFileInput} className="hidden" />
+                  <span className="bg-green-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-green-700 transition-colors inline-block">
+                    Browse Files
+                  </span>
+                </label>
+                <p className="text-xs text-gray-500 mt-4">Accepts: .xlsx, .xls files</p>
+              </div>
 
               {error && (
                 <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -722,59 +575,207 @@ export default function GreatDayToBpsPdfPage() {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="space-y-6">
+              {/* File Info */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="font-medium text-gray-800">{fileName}</p>
+                      {employeeStats && (
+                        <p className="text-sm text-gray-600">
+                          {employeeStats.totalRecords} records • {employeeStats.uniqueEmployees} employees
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button onClick={clearFile} className="p-2 hover:bg-green-100 rounded-lg transition-colors">
+                    <X className="w-5 h-5 text-gray-600" />
+                  </button>
+                </div>
+              </div>
 
-            {/* Preview Section */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <User className="w-5 h-5 text-green-600" />
-                Data Preview
-              </h2>
+              {/* Data Preview Section - Shown first when file is uploaded */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-green-600" />
+                  Data Preview
+                </h2>
 
-              {attendanceData && attendanceData.length > 0 ? (() => {
-                // Apply field mapping to preview data
-                const { headers: mappedHeaders, body: mappedBody } = mapExcelDataToFields(attendanceData, FIELD_MAPPING);
-                const previewRows = mappedBody.slice(0, 20);
+                {(() => {
+                  const { headers: mappedHeaders, body: mappedBody } = mapExcelDataToFields(attendanceData, FIELD_MAPPING);
+                  const previewRows = mappedBody.slice(0, 20);
 
-                return (
-                  <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
-                    <table className="min-w-full divide-y divide-gray-200 text-xs">
-                      <thead className="bg-green-50 sticky top-0">
-                        <tr>
-                          {mappedHeaders.map((header, index) => (
-                            <th key={index} className="px-2 py-2 text-left text-xs font-medium text-gray-700">
-                              {header || `Col ${index + 1}`}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {previewRows.map((row, rowIndex) => (
-                          <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            {row.map((cell, cellIndex) => (
-                              <td key={cellIndex} className="px-2 py-2 whitespace-nowrap text-gray-900">
-                                {cell || ''}
-                              </td>
+                  return (
+                    <div className="overflow-auto max-h-[400px] border border-gray-200 rounded-lg">
+                      <table className="min-w-full divide-y divide-gray-200 text-xs">
+                        <thead className="bg-green-50 sticky top-0">
+                          <tr>
+                            {mappedHeaders.map((header, index) => (
+                              <th key={index} className="px-2 py-2 text-left text-xs font-medium text-gray-700">
+                                {header || `Col ${index + 1}`}
+                              </th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {mappedBody.length > 20 && (
-                      <div className="p-3 bg-gray-50 text-center text-xs text-gray-600">
-                        Showing first 20 data rows of {mappedBody.length} total
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {previewRows.map((row, rowIndex) => (
+                            <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              {row.map((cell, cellIndex) => (
+                                <td key={cellIndex} className="px-2 py-2 whitespace-nowrap text-gray-900">
+                                  {cell || ''}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {mappedBody.length > 20 && (
+                        <div className="p-3 bg-gray-50 text-center text-xs text-gray-600">
+                          Showing first 20 data rows of {mappedBody.length} total
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* PDF Settings Section - Shown below preview */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <Download className="w-5 h-5 text-green-600" />
+                  PDF Configuration
+                </h2>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">PDF Filename</label>
+                    <input
+                      type="text"
+                      value={pdfConfig.fileName}
+                      onChange={(e) => setPdfConfig({ ...pdfConfig, fileName: e.target.value })}
+                      placeholder="e.g., Attendance Report December"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Leave empty to use original filename</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Employee Name</label>
+                    <input
+                      type="text"
+                      value={pdfConfig.employeeName}
+                      onChange={(e) => handleEmployeeNameChange(e.target.value)}
+                      placeholder="Auto-detected from file"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Employee Signature (Tanda Tangan Karyawan)</label>
+                    {!signaturePreview ? (
+                      <label className="cursor-pointer">
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-green-400 transition-all text-center">
+                          <ImageIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm text-gray-600 mb-1">Upload signature image</p>
+                          <p className="text-xs text-gray-500">PNG, JPG (Recommended: transparent PNG)</p>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleSignatureUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    ) : (
+                      <div className="relative border border-gray-300 rounded-lg p-3 bg-gray-50">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={signaturePreview}
+                            alt="Signature preview"
+                            className="h-12 w-auto object-contain bg-white border border-gray-200 rounded px-2"
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-700">Signature uploaded</p>
+                            <p className="text-xs text-gray-500">Auto-saved across all pages</p>
+                          </div>
+                          <button
+                            onClick={removeSignature}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            aria-label="Remove signature"
+                          >
+                            <X className="w-5 h-5 text-red-600" />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
-                );
-              })() : (
-                <div className="text-center py-16 text-gray-400">
-                  <FileSpreadsheet className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p>No attendance data to preview</p>
-                  <p className="text-sm mt-2">Upload a Great Day export to see the data</p>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Checked By (Diperiksa Oleh)</label>
+                    <input
+                      type="text"
+                      value={pdfConfig.checkedBy}
+                      onChange={(e) => handleCheckedByChange(e.target.value)}
+                      placeholder="e.g., ATHIANA NURUL"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages (synced with Team Leader)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Approved By (Disetujui Oleh)</label>
+                    <input
+                      type="text"
+                      value={pdfConfig.approvedBy}
+                      onChange={(e) => handleApprovedByChange(e.target.value)}
+                      placeholder="e.g., ASWIN SWASTIKA"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Justifikasi</label>
+                    <textarea
+                      value={pdfConfig.justifikasi}
+                      onChange={(e) => setPdfConfig({ ...pdfConfig, justifikasi: e.target.value })}
+                      placeholder="Enter justification text (optional)"
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-gray-900 resize-none"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">This text will appear in the Justifikasi box</p>
+                  </div>
                 </div>
-              )}
+
+                <div className="mt-6">
+                  <button
+                    onClick={generatePDF}
+                    className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                  >
+                    <Download className="w-5 h-5" />
+                    Download PDF & Add to Merge
+                  </button>
+
+                  {addedToCart && (
+                    <div className="flex items-center justify-center gap-2 p-3 mt-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700">
+                      <ShoppingCart className="w-4 h-4" />
+                      <span className="text-sm">Added to Merge PDF!</span>
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-red-700 text-sm">{error}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

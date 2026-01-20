@@ -446,216 +446,45 @@ export default function CsvToPdfPage() {
             </p>
           </header>
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Upload Section */}
+          {/* Upload Section - Always visible */}
+          {!csvData ? (
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
                 <UploadCloud className="w-5 h-5 text-blue-600" />
                 Upload CSV File
               </h2>
 
-              {!csvData ? (
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
-                    isDragging
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-300 hover:border-blue-400'
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                  isDragging
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-300 hover:border-blue-400'
+                }`}
+              >
+                <UploadCloud
+                  className={`w-16 h-16 mx-auto mb-4 ${
+                    isDragging ? 'text-blue-500' : 'text-gray-400'
                   }`}
-                >
-                  <UploadCloud
-                    className={`w-16 h-16 mx-auto mb-4 ${
-                      isDragging ? 'text-blue-500' : 'text-gray-400'
-                    }`}
+                />
+                <p className="text-gray-600 mb-2">
+                  Drag and drop your CSV file here
+                </p>
+                <p className="text-gray-500 text-sm mb-4">or</p>
+                <label className="inline-block">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileInput}
+                    className="hidden"
                   />
-                  <p className="text-gray-600 mb-2">
-                    Drag and drop your CSV file here
-                  </p>
-                  <p className="text-gray-500 text-sm mb-4">or</p>
-                  <label className="inline-block">
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={handleFileInput}
-                      className="hidden"
-                    />
-                    <span className="bg-blue-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors inline-block">
-                      Browse Files
-                    </span>
-                  </label>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      <div>
-                        <p className="font-medium text-gray-800">{fileName}</p>
-                        <p className="text-sm text-gray-600">
-                          {csvData.length} rows × {FIELD_MAPPING.length} columns (mapped)
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={clearFile}
-                      className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                      aria-label="Remove file"
-                    >
-                      <X className="w-5 h-5 text-gray-600" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-gray-800">PDF Settings</h3>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        PDF Filename
-                      </label>
-                      <input
-                        type="text"
-                        value={pdfConfig.title}
-                        onChange={(e) =>
-                          setPdfConfig({ ...pdfConfig, title: e.target.value })
-                        }
-                        placeholder="e.g., Absen Jira November"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">This will be used as the PDF filename</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nama Karyawan (Employee Name)
-                      </label>
-                      <input
-                        type="text"
-                        value={pdfConfig.employeeName}
-                        onChange={(e) => handleEmployeeNameChange(e.target.value)}
-                        placeholder="Enter employee name"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Tanda Tangan Karyawan (Employee Signature)
-                      </label>
-                      {!signaturePreview ? (
-                        <label className="cursor-pointer">
-                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-all text-center">
-                            <ImageIcon className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                            <p className="text-sm text-gray-600 mb-1">Upload signature image</p>
-                            <p className="text-xs text-gray-500">PNG, JPG (Recommended: transparent PNG)</p>
-                          </div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleSignatureUpload}
-                            className="hidden"
-                          />
-                        </label>
-                      ) : (
-                        <div className="relative border border-gray-300 rounded-lg p-3 bg-gray-50">
-                          <div className="flex items-center gap-3">
-                            <img 
-                              src={signaturePreview} 
-                              alt="Signature preview" 
-                              className="h-16 w-auto object-contain bg-white border border-gray-200 rounded px-2"
-                            />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-700">Signature uploaded</p>
-                              <p className="text-xs text-gray-500">Auto-saved across all pages</p>
-                            </div>
-                            <button
-                              onClick={removeSignature}
-                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                              aria-label="Remove signature"
-                            >
-                              <X className="w-5 h-5 text-red-600" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Team Leader
-                      </label>
-                      <input
-                        type="text"
-                        value={pdfConfig.teamLeader}
-                        onChange={(e) => handleTeamLeaderChange(e.target.value)}
-                        placeholder="Enter team leader name"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Orientation
-                      </label>
-                      <select
-                        value={pdfConfig.orientation}
-                        onChange={(e) =>
-                          setPdfConfig({ ...pdfConfig, orientation: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                      >
-                        <option value="landscape">Landscape (Recommended for wide tables)</option>
-                        <option value="portrait">Portrait</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Font Size
-                      </label>
-                      <input
-                        type="number"
-                        min="3"
-                        max="14"
-                        value={pdfConfig.fontSize}
-                        onChange={(e) =>
-                          setPdfConfig({
-                            ...pdfConfig,
-                            fontSize: parseInt(e.target.value)
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Default is 3pt to match the template. Increase to 4-5pt if text is too small.</p>
-                    </div>
-
-                    <button
-                      onClick={generatePDF}
-                      className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                    >
-                      <Download className="w-5 h-5" />
-                      Download PDF & Add to Merge
-                    </button>
-
-                    {addedToCart && (
-                      <div className="flex items-center justify-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700">
-                        <ShoppingCart className="w-4 h-4" />
-                        <span className="text-sm">Added to Merge PDF cart!</span>
-                      </div>
-                    )}
-
-                    {cartCount > 0 && (
-                      <div className="text-center text-sm text-gray-600">
-                        <ShoppingCart className="w-4 h-4 inline mr-1" />
-                        {cartCount} PDF{cartCount !== 1 ? 's' : ''} in merge cart
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+                  <span className="bg-blue-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors inline-block">
+                    Browse Files
+                  </span>
+                </label>
+              </div>
 
               {error && (
                 <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -663,68 +492,240 @@ export default function CsvToPdfPage() {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="space-y-6">
+              {/* File Info */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="font-medium text-gray-800">{fileName}</p>
+                      <p className="text-sm text-gray-600">
+                        {csvData.length} rows × {FIELD_MAPPING.length} columns (mapped)
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={clearFile}
+                    className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                    aria-label="Remove file"
+                  >
+                    <X className="w-5 h-5 text-gray-600" />
+                  </button>
+                </div>
+              </div>
 
-            {/* Preview Section */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                Data Preview
-              </h2>
+              {/* Data Preview Section - Shown first when file is uploaded */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  Data Preview
+                </h2>
 
-              {csvData && csvData.length > 0 ? (() => {
-                // Apply field mapping to preview data
-                const { headers: mappedHeaders, body: mappedBody } = mapCsvDataToFields(csvData, FIELD_MAPPING);
-                const previewRows = mappedBody.slice(0, 50);
+                {(() => {
+                  const { headers: mappedHeaders, body: mappedBody } = mapCsvDataToFields(csvData, FIELD_MAPPING);
+                  const previewRows = mappedBody.slice(0, 50);
 
-                return (
-                  <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          {mappedHeaders.map((header, index) => (
-                            <th
-                              key={index}
-                              className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider whitespace-nowrap"
-                            >
-                              {header || `Column ${index + 1}`}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {previewRows.map((row, rowIndex) => (
-                          <tr
-                            key={rowIndex}
-                            className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                          >
-                            {row.map((cell, cellIndex) => (
-                              <td
-                                key={cellIndex}
-                                className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"
+                  return (
+                    <div className="overflow-auto max-h-[400px] border border-gray-200 rounded-lg">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            {mappedHeaders.map((header, index) => (
+                              <th
+                                key={index}
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider whitespace-nowrap"
                               >
-                                {cell}
-                              </td>
+                                {header || `Column ${index + 1}`}
+                              </th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {mappedBody.length > 50 && (
-                      <div className="p-3 bg-gray-50 text-center text-sm text-gray-600">
-                        Showing first 50 rows of {mappedBody.length} data rows
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {previewRows.map((row, rowIndex) => (
+                            <tr
+                              key={rowIndex}
+                              className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                            >
+                              {row.map((cell, cellIndex) => (
+                                <td
+                                  key={cellIndex}
+                                  className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"
+                                >
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {mappedBody.length > 50 && (
+                        <div className="p-3 bg-gray-50 text-center text-sm text-gray-600">
+                          Showing first 50 rows of {mappedBody.length} data rows
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* PDF Settings Section - Shown below preview */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <Download className="w-5 h-5 text-blue-600" />
+                  PDF Settings
+                </h2>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      PDF Filename
+                    </label>
+                    <input
+                      type="text"
+                      value={pdfConfig.title}
+                      onChange={(e) =>
+                        setPdfConfig({ ...pdfConfig, title: e.target.value })
+                      }
+                      placeholder="e.g., Absen Jira November"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">This will be used as the PDF filename</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nama Karyawan (Employee Name)
+                    </label>
+                    <input
+                      type="text"
+                      value={pdfConfig.employeeName}
+                      onChange={(e) => handleEmployeeNameChange(e.target.value)}
+                      placeholder="Enter employee name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Tanda Tangan Karyawan (Employee Signature)
+                    </label>
+                    {!signaturePreview ? (
+                      <label className="cursor-pointer">
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-all text-center">
+                          <ImageIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm text-gray-600 mb-1">Upload signature image</p>
+                          <p className="text-xs text-gray-500">PNG, JPG (Recommended: transparent PNG)</p>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleSignatureUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    ) : (
+                      <div className="relative border border-gray-300 rounded-lg p-3 bg-gray-50">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={signaturePreview}
+                            alt="Signature preview"
+                            className="h-12 w-auto object-contain bg-white border border-gray-200 rounded px-2"
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-700">Signature uploaded</p>
+                            <p className="text-xs text-gray-500">Auto-saved across all pages</p>
+                          </div>
+                          <button
+                            onClick={removeSignature}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            aria-label="Remove signature"
+                          >
+                            <X className="w-5 h-5 text-red-600" />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
-                );
-              })() : (
-                <div className="text-center py-16 text-gray-400">
-                  <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p>No data to preview</p>
-                  <p className="text-sm mt-2">Upload a CSV file to see the preview</p>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Team Leader
+                    </label>
+                    <input
+                      type="text"
+                      value={pdfConfig.teamLeader}
+                      onChange={(e) => handleTeamLeaderChange(e.target.value)}
+                      placeholder="Enter team leader name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Orientation
+                    </label>
+                    <select
+                      value={pdfConfig.orientation}
+                      onChange={(e) =>
+                        setPdfConfig({ ...pdfConfig, orientation: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    >
+                      <option value="landscape">Landscape (Recommended for wide tables)</option>
+                      <option value="portrait">Portrait</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Font Size
+                    </label>
+                    <input
+                      type="number"
+                      min="3"
+                      max="14"
+                      value={pdfConfig.fontSize}
+                      onChange={(e) =>
+                        setPdfConfig({
+                          ...pdfConfig,
+                          fontSize: parseInt(e.target.value)
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Default is 3pt. Increase to 4-5pt if text is too small.</p>
+                  </div>
                 </div>
-              )}
+
+                <div className="mt-6">
+                  <button
+                    onClick={generatePDF}
+                    className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                  >
+                    <Download className="w-5 h-5" />
+                    Download PDF & Add to Merge
+                  </button>
+
+                  {addedToCart && (
+                    <div className="flex items-center justify-center gap-2 p-3 mt-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700">
+                      <ShoppingCart className="w-4 h-4" />
+                      <span className="text-sm">Added to Merge PDF!</span>
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-red-700 text-sm">{error}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

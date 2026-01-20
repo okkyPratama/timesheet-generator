@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, CalendarClock, Combine, Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { FileText, CalendarClock, Combine, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 const menuItems = [
   {
@@ -26,9 +26,14 @@ const menuItems = [
   }
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isCollapsed, setIsCollapsed }) {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   return (
     <>
@@ -45,24 +50,48 @@ export default function Sidebar() {
         )}
       </button>
 
+      {/* Desktop Collapse Button - shown when sidebar is collapsed */}
+      {isCollapsed && (
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="hidden lg:flex fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+          aria-label="Expand sidebar"
+        >
+          <Menu className="w-6 h-6 text-gray-700" />
+        </button>
+      )}
+
       {/* Sidebar */}
       <aside
         className={`
-          fixed lg:static inset-y-0 left-0 z-40
+          fixed lg:fixed inset-y-0 left-0 z-40
           w-72 bg-white border-r border-gray-200
           transform transition-transform duration-300 ease-in-out
-          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+          ${isCollapsed ? 'lg:-translate-x-full' : 'lg:translate-x-0'}
         `}
       >
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="p-6 border-b border-gray-200">
-            <h1 className="text-2xl font-bold text-gray-800">
-              Timesheet Generator
-            </h1>
-            <p className="text-sm text-gray-600 mt-1">
-              Convert & Merge Documents
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">
+                  Timesheet Generator
+                </h1>
+                <p className="text-sm text-gray-600 mt-1">
+                  Convert & Merge Documents
+                </p>
+              </div>
+              {/* Desktop Collapse Button */}
+              <button
+                onClick={() => setIsCollapsed(true)}
+                className="hidden lg:flex p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Collapse sidebar"
+              >
+                <ChevronLeft className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
           </div>
 
           {/* Navigation */}
