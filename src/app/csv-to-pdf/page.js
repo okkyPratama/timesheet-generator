@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { UploadCloud, Download, FileText, X, CheckCircle, Image as ImageIcon, ShoppingCart } from 'lucide-react';
+import { UploadCloud, Download, FileText, X, CheckCircle, Image as ImageIcon, ShoppingCart, Square, CheckSquare, MinusSquare } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { createModuleLogger } from '@/lib/logger';
 import { useUserData } from '@/context/UserDataContext';
@@ -37,7 +37,7 @@ const FIELD_MAPPING = [
   { csvField: 'Project type', displayName: 'Project type' },
   { csvField: 'Project lead', displayName: 'Project lead' }
 ];
-
+ 
 // Helper function to map CSV data to defined fields
 const mapCsvDataToFields = (csvData, fieldMapping) => {
   if (!csvData || csvData.length === 0) {
@@ -77,7 +77,7 @@ const mapCsvDataToFields = (csvData, fieldMapping) => {
 
   return { headers: mappedHeaders, body: mappedBody };
 };
-
+  
 export default function CsvToPdfPage() {
   const { userData, updateField, isLoaded } = useUserData();
   const { addToCart, cartCount } = usePdfCart();
@@ -89,12 +89,13 @@ export default function CsvToPdfPage() {
   const [signatureImage, setSignatureImage] = useState(null);
   const [signaturePreview, setSignaturePreview] = useState(null);
   const [pdfConfig, setPdfConfig] = useState({
-    orientation: 'landscape',
+    orientation: 'portrait',
     fontSize: 3,
     title: '',
     employeeName: '',
     teamLeader: ''
   });
+  const [selectedRows, setSelectedRows] = useState(new Set());
 
   // Load shared user data when context is ready
   useEffect(() => {
@@ -151,8 +152,13 @@ export default function CsvToPdfPage() {
           }, 'CSV file parsed successfully');
           setCsvData(results.data);
 
-          // Since we always map to 21 columns, always use landscape orientation
-          setPdfConfig(prev => ({ ...prev, orientation: 'landscape' }));
+          // Initialize all data rows as selected (excluding header row)
+          const { body } = mapCsvDataToFields(results.data, FIELD_MAPPING);
+          const allRowIndices = new Set(body.map((_, index) => index));
+          setSelectedRows(allRowIndices);
+
+          // Default to portrait orientation to match standard timesheet format
+          setPdfConfig(prev => ({ ...prev, orientation: 'portrait' }));
         } else {
           log.warn({ fileName: file.name }, 'CSV file is empty');
           setError('CSV file is empty');
@@ -238,11 +244,12 @@ export default function CsvToPdfPage() {
       const doc = new jsPDF({
         orientation: pdfConfig.orientation,
         unit: 'mm',
-        format: 'a4'
+        format: 'letter'
       });
 
-      const pageWidth = pdfConfig.orientation === 'landscape' ? 297 : 210;
-      const pageHeight = pdfConfig.orientation === 'landscape' ? 210 : 297;
+      // Letter size: 215.9mm x 279.4mm (8.5" x 11")
+      const pageWidth = pdfConfig.orientation === 'landscape' ? 279.4 : 215.9;
+      const pageHeight = pdfConfig.orientation === 'landscape' ? 215.9 : 279.4;
 
       log.debug({ pageWidth, pageHeight, orientation: pdfConfig.orientation }, 'PDF document created');
 
@@ -266,12 +273,22 @@ export default function CsvToPdfPage() {
       }
 
       // Map CSV data to defined fields
-      const { headers: filteredHeaders, body } = mapCsvDataToFields(filteredData, FIELD_MAPPING);
+      const { headers: filteredHeaders, body: allRows } = mapCsvDataToFields(filteredData, FIELD_MAPPING);
+
+      // Filter to only include selected rows
+      const body = allRows.filter((_, index) => selectedRows.has(index));
+
+      if (body.length === 0) {
+        log.warn('No rows selected for PDF generation');
+        setError('Please select at least one row to include in the PDF');
+        return;
+      }
 
       log.debug({
         headerCount: filteredHeaders.length,
-        bodyRows: body.length
-      }, 'Data mapped to defined fields');
+        totalRows: allRows.length,
+        selectedRows: body.length
+      }, 'Data mapped and filtered to selected rows');
 
     // Table configuration - More vertical spacing and better readability
     const tableStartY = yPosition;
@@ -312,17 +329,6 @@ export default function CsvToPdfPage() {
       margin: { left: 2, right: 2, top: 3, bottom: 40 },
       tableWidth: 'auto',
       theme: 'grid',
-      didDrawPage: (data) => {
-        // Footer with page numbers
-        const pageCount = doc.internal.getNumberOfPages();
-        doc.setFontSize(6);
-        doc.setFont('helvetica', 'normal');
-        doc.text(
-          `Page ${data.pageNumber} of ${pageCount}`,
-          pageWidth - 20,
-          pageHeight - 2
-        );
-      }
     });
 
     // Get final Y position after table
@@ -423,8 +429,9 @@ export default function CsvToPdfPage() {
     setError('');
     setSignatureImage(null);
     setSignaturePreview(null);
+    setSelectedRows(new Set());
     setPdfConfig({
-      orientation: 'landscape',
+      orientation: 'portrait',
       fontSize: 3,
       title: '',
       employeeName: '',
@@ -526,46 +533,114 @@ export default function CsvToPdfPage() {
                 {(() => {
                   const { headers: mappedHeaders, body: mappedBody } = mapCsvDataToFields(csvData, FIELD_MAPPING);
                   const previewRows = mappedBody.slice(0, 50);
+                  const allSelected = mappedBody.length > 0 && selectedRows.size === mappedBody.length;
+                  const someSelected = selectedRows.size > 0 && selectedRows.size < mappedBody.length;
+
+                  const toggleRow = (rowIndex) => {
+                    setSelectedRows(prev => {
+                      const newSet = new Set(prev);
+                      if (newSet.has(rowIndex)) {
+                        newSet.delete(rowIndex);
+                      } else {
+                        newSet.add(rowIndex);
+                      }
+                      return newSet;
+                    });
+                  };
+
+                  const toggleAll = () => {
+                    if (allSelected) {
+                      setSelectedRows(new Set());
+                    } else {
+                      setSelectedRows(new Set(mappedBody.map((_, index) => index)));
+                    }
+                  };
 
                   return (
-                    <div className="overflow-auto max-h-[400px] border border-gray-200 rounded-lg">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50 sticky top-0">
-                          <tr>
-                            {mappedHeaders.map((header, index) => (
-                              <th
-                                key={index}
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider whitespace-nowrap"
-                              >
-                                {header || `Column ${index + 1}`}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {previewRows.map((row, rowIndex) => (
-                            <tr
-                              key={rowIndex}
-                              className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                            >
-                              {row.map((cell, cellIndex) => (
-                                <td
-                                  key={cellIndex}
-                                  className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"
+                    <>
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm text-gray-600">
+                          {selectedRows.size} of {mappedBody.length} rows selected for PDF
+                        </p>
+                        <button
+                          onClick={toggleAll}
+                          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          {allSelected ? 'Deselect All' : 'Select All'}
+                        </button>
+                      </div>
+                      <div className="overflow-auto max-h-[400px] border border-gray-200 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50 sticky top-0">
+                            <tr>
+                              <th className="px-3 py-3 text-center w-10">
+                                <button
+                                  onClick={toggleAll}
+                                  className="text-gray-600 hover:text-blue-600"
+                                  title={allSelected ? 'Deselect all' : 'Select all'}
                                 >
-                                  {cell}
-                                </td>
+                                  {allSelected ? (
+                                    <CheckSquare className="w-5 h-5 text-blue-600" />
+                                  ) : someSelected ? (
+                                    <MinusSquare className="w-5 h-5 text-blue-600" />
+                                  ) : (
+                                    <Square className="w-5 h-5" />
+                                  )}
+                                </button>
+                              </th>
+                              {mappedHeaders.map((header, index) => (
+                                <th
+                                  key={index}
+                                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider whitespace-nowrap"
+                                >
+                                  {header || `Column ${index + 1}`}
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {mappedBody.length > 50 && (
-                        <div className="p-3 bg-gray-50 text-center text-sm text-gray-600">
-                          Showing first 50 rows of {mappedBody.length} data rows
-                        </div>
-                      )}
-                    </div>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {previewRows.map((row, rowIndex) => (
+                              <tr
+                                key={rowIndex}
+                                className={`${rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
+                                  !selectedRows.has(rowIndex) ? 'opacity-50' : ''
+                                } hover:bg-blue-50 cursor-pointer`}
+                                onClick={() => toggleRow(rowIndex)}
+                              >
+                                <td className="px-3 py-3 text-center">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleRow(rowIndex);
+                                    }}
+                                    className="text-gray-600 hover:text-blue-600"
+                                  >
+                                    {selectedRows.has(rowIndex) ? (
+                                      <CheckSquare className="w-5 h-5 text-blue-600" />
+                                    ) : (
+                                      <Square className="w-5 h-5" />
+                                    )}
+                                  </button>
+                                </td>
+                                {row.map((cell, cellIndex) => (
+                                  <td
+                                    key={cellIndex}
+                                    className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"
+                                  >
+                                    {cell}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {mappedBody.length > 50 && (
+                          <div className="p-3 bg-gray-50 text-center text-sm text-gray-600">
+                            Showing first 50 rows of {mappedBody.length} data rows (selection applies to all rows)
+                          </div>
+                        )}
+                      </div>
+                    </>
                   );
                 })()}
               </div>
@@ -675,8 +750,8 @@ export default function CsvToPdfPage() {
                       }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                     >
-                      <option value="landscape">Landscape (Recommended for wide tables)</option>
-                      <option value="portrait">Portrait</option>
+                      <option value="portrait">Portrait (Recommended)</option>
+                      <option value="landscape">Landscape (for wide tables)</option>
                     </select>
                   </div>
 

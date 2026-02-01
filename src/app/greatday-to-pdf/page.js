@@ -294,7 +294,8 @@ export default function GreatDayToBpsPdfPage() {
     }
 
     try {
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      // Letter size: 215.9mm x 279.4mm (8.5" x 11") - matches reference timesheet format
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
@@ -346,23 +347,24 @@ export default function GreatDayToBpsPdfPage() {
         minCellHeight: 3.5
       },
       columnStyles: {
-        0: { cellWidth: 8, halign: 'center' },
-        1: { cellWidth: 16 },
-        2: { cellWidth: 32 },
-        3: { cellWidth: 18 },
-        4: { cellWidth: 32 },
-        5: { cellWidth: 11, halign: 'center' },
-        6: { cellWidth: 11, halign: 'center' },
-        7: { cellWidth: 11, halign: 'center' },
-        8: { cellWidth: 11, halign: 'center' },
-        9: { cellWidth: 40 }
+        // Letter size (215.9mm) with 5mm margins = 205.9mm available width
+        0: { cellWidth: 8, halign: 'center' },   // No.
+        1: { cellWidth: 17 },                     // Emp No.
+        2: { cellWidth: 34 },                     // Employee
+        3: { cellWidth: 20 },                     // Date
+        4: { cellWidth: 34 },                     // Shift Name
+        5: { cellWidth: 12, halign: 'center' },   // Shift In
+        6: { cellWidth: 12, halign: 'center' },   // Shift Out
+        7: { cellWidth: 12, halign: 'center' },   // Actual In
+        8: { cellWidth: 12, halign: 'center' },   // Actual Out
+        9: { cellWidth: 45 }                      // Remark (expanded)
       },
       theme: 'grid'
     });
 
     let finalY = doc.lastAutoTable.finalY + 3;
     const marginLeft = 5; // Match table margin
-    const tableWidth = 190; // Total width of table columns (8+16+32+18+32+11+11+11+11+40)
+    const tableWidth = pageWidth - (marginLeft * 2); // Full width minus margins
 
     // Justifikasi section - bordered box with label inside
     const justBoxHeight = 55; // Height to match ~16 rows in Excel template
@@ -751,7 +753,7 @@ export default function GreatDayToBpsPdfPage() {
                   </div>
                 </div>
 
-                <div className="mt-6">
+                <div className="mt-6 max-w-md mx-auto">
                   <button
                     onClick={generatePDF}
                     className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
