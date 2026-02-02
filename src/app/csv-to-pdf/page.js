@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { UploadCloud, Download, FileText, X, CheckCircle, Image as ImageIcon, ShoppingCart, Square, CheckSquare, MinusSquare } from 'lucide-react';
+import { UploadCloud, Download, FileText, X, CheckCircle, Image as ImageIcon, ShoppingCart, Square, CheckSquare, MinusSquare, Loader2 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { createModuleLogger } from '@/lib/logger';
 import { useUserData } from '@/context/UserDataContext';
@@ -93,9 +93,11 @@ export default function CsvToPdfPage() {
     fontSize: 3,
     title: '',
     employeeName: '',
-    teamLeader: ''
+    teamLeader: '',
+    departmentHead: ''
   });
   const [selectedRows, setSelectedRows] = useState(new Set());
+  const [isUploading, setIsUploading] = useState(false);
 
   // Load shared user data when context is ready
   useEffect(() => {
@@ -141,9 +143,11 @@ export default function CsvToPdfPage() {
 
     setError('');
     setFileName(file.name);
+    setIsUploading(true);
 
     Papa.parse(file, {
       complete: (results) => {
+        setIsUploading(false);
         if (results.data && results.data.length > 0) {
           log.info({
             rowCount: results.data.length,
@@ -165,6 +169,7 @@ export default function CsvToPdfPage() {
         }
       },
       error: (error) => {
+        setIsUploading(false);
         log.error({ error: error.message, fileName: file.name }, 'Error parsing CSV file');
         setError('Error parsing CSV file: ' + error.message);
       }
@@ -342,30 +347,34 @@ export default function CsvToPdfPage() {
     // Position signature section at the bottom of the page
     const signatureY = pageHeight - 35;
 
-    // Calculate centered positions with increased spacing
-    const pageCenter = pageWidth / 2;
-    const signatureSpacing = 60; // Increased spacing between signatures
-    const signatureWidth = 50;
+    // Calculate positions for 3 signature blocks (Karyawan, Team Leader, Department Head)
+    const marginX = 10;
+    const usableWidth = pageWidth - (marginX * 2);
+    const signatureWidth = 45;
+    const signatureSpacing = usableWidth / 3;
 
-    const leftSignatureCenter = pageCenter - signatureSpacing;
-    const rightSignatureCenter = pageCenter + signatureSpacing;
+    // Center positions for each signature block
+    const leftSignatureCenter = marginX + (signatureSpacing / 2);
+    const middleSignatureCenter = marginX + signatureSpacing + (signatureSpacing / 2);
+    const rightSignatureCenter = marginX + (signatureSpacing * 2) + (signatureSpacing / 2);
 
     const leftSignatureX = leftSignatureCenter - (signatureWidth / 2);
+    const middleSignatureX = middleSignatureCenter - (signatureWidth / 2);
     const rightSignatureX = rightSignatureCenter - (signatureWidth / 2);
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
 
-    // Employee Signature - Center aligned with increased spacing
+    // Employee Signature (Left)
     doc.text('Karyawan', leftSignatureCenter, signatureY, { align: 'center' });
-    
-    // Add signature image if available - positioned with more space from text
+
+    // Add signature image if available
     if (signatureImage) {
       log.debug('Adding signature image to PDF');
       const imgWidth = 30;
       const imgHeight = 10;
       const imgX = leftSignatureCenter - (imgWidth / 2);
-      const imgY = signatureY + 4; // Increased from +2 to +4 for more space
+      const imgY = signatureY + 4;
 
       try {
         doc.addImage(signatureImage, 'PNG', imgX, imgY, imgWidth, imgHeight);
@@ -375,16 +384,20 @@ export default function CsvToPdfPage() {
       }
     }
 
-    // Signature line - positioned lower to accommodate signature image
-    doc.line(leftSignatureX, signatureY + 16, leftSignatureX + signatureWidth, signatureY + 16); // Changed from +12 to +16
-    doc.text(pdfConfig.employeeName || '_________________', leftSignatureCenter, signatureY + 21, { align: 'center' }); // Changed from +17 to +21
-    doc.setFontSize(8);
+    // Signature line and name
+    doc.line(leftSignatureX, signatureY + 16, leftSignatureX + signatureWidth, signatureY + 16);
+    doc.text(pdfConfig.employeeName || '_________________', leftSignatureCenter, signatureY + 21, { align: 'center' });
 
-    // Team Leader Signature - Center aligned with same spacing
-    doc.setFontSize(10);
-    doc.text('Team Leader', rightSignatureCenter, signatureY, { align: 'center' });
-    doc.line(rightSignatureX, signatureY + 16, rightSignatureX + signatureWidth, signatureY + 16); // Changed from +12 to +16
-    doc.text(pdfConfig.teamLeader || '_________________', rightSignatureCenter, signatureY + 21, { align: 'center' }); // Changed from +17 to +21
+    // Team Leader Signature (Middle)
+    doc.text('Team Leader', middleSignatureCenter, signatureY, { align: 'center' });
+    doc.line(middleSignatureX, signatureY + 16, middleSignatureX + signatureWidth, signatureY + 16);
+    doc.text(pdfConfig.teamLeader || '_________________', middleSignatureCenter, signatureY + 21, { align: 'center' });
+
+    // Department Head Signature (Right)
+    doc.text('Department Head', rightSignatureCenter, signatureY, { align: 'center' });
+    doc.line(rightSignatureX, signatureY + 16, rightSignatureX + signatureWidth, signatureY + 16);
+    doc.text(pdfConfig.departmentHead || '_________________', rightSignatureCenter, signatureY + 21, { align: 'center' });
+
     doc.setFontSize(8);
 
     // Use PDF Filename field, fallback to CSV name
@@ -435,7 +448,8 @@ export default function CsvToPdfPage() {
       fontSize: 3,
       title: '',
       employeeName: '',
-      teamLeader: ''
+      teamLeader: '',
+      departmentHead: ''
     });
   };
 
@@ -464,33 +478,49 @@ export default function CsvToPdfPage() {
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                onDrop={!isUploading ? handleDrop : undefined}
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
-                  isDragging
+                  isUploading
+                    ? 'border-blue-500 bg-blue-50'
+                    : isDragging
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-300 hover:border-blue-400'
                 }`}
               >
-                <UploadCloud
-                  className={`w-16 h-16 mx-auto mb-4 ${
-                    isDragging ? 'text-blue-500' : 'text-gray-400'
-                  }`}
-                />
-                <p className="text-gray-600 mb-2">
-                  Drag and drop your CSV file here
-                </p>
-                <p className="text-gray-500 text-sm mb-4">or</p>
-                <label className="inline-block">
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileInput}
-                    className="hidden"
-                  />
-                  <span className="bg-blue-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors inline-block">
-                    Browse Files
-                  </span>
-                </label>
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-16 h-16 mx-auto mb-4 text-blue-500 animate-spin" />
+                    <p className="text-blue-600 font-medium mb-2">
+                      Processing CSV file...
+                    </p>
+                    <p className="text-gray-500 text-sm">
+                      Please wait while we parse your data
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud
+                      className={`w-16 h-16 mx-auto mb-4 ${
+                        isDragging ? 'text-blue-500' : 'text-gray-400'
+                      }`}
+                    />
+                    <p className="text-gray-600 mb-2">
+                      Drag and drop your CSV file here
+                    </p>
+                    <p className="text-gray-500 text-sm mb-4">or</p>
+                    <label className="inline-block">
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleFileInput}
+                        className="hidden"
+                      />
+                      <span className="bg-blue-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors inline-block">
+                        Browse Files
+                      </span>
+                    </label>
+                  </>
+                )}
               </div>
 
               {error && (
@@ -737,6 +767,21 @@ export default function CsvToPdfPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                     />
                     <p className="text-xs text-gray-500 mt-1">Auto-saved across all pages</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Department Head
+                    </label>
+                    <input
+                      type="text"
+                      value={pdfConfig.departmentHead}
+                      onChange={(e) =>
+                        setPdfConfig({ ...pdfConfig, departmentHead: e.target.value })
+                      }
+                      placeholder="Enter department head name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+                    />
                   </div>
 
                   <div>

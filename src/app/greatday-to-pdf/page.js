@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { UploadCloud, Download, FileSpreadsheet, X, CheckCircle, User, Image as ImageIcon, ShoppingCart } from 'lucide-react';
+import { UploadCloud, Download, FileSpreadsheet, X, CheckCircle, User, Image as ImageIcon, ShoppingCart, Loader2 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { createModuleLogger } from '@/lib/logger';
 import { useUserData } from '@/context/UserDataContext';
@@ -97,6 +97,7 @@ export default function GreatDayToBpsPdfPage() {
     approvedBy: '',
     justifikasi: ''
   });
+  const [isUploading, setIsUploading] = useState(false);
 
   // Load shared user data when context is ready
   useEffect(() => {
@@ -152,6 +153,7 @@ export default function GreatDayToBpsPdfPage() {
 
     setError('');
     setFileName(file.name);
+    setIsUploading(true);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -163,6 +165,7 @@ export default function GreatDayToBpsPdfPage() {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
+        setIsUploading(false);
         if (jsonData && jsonData.length > 3) {
           log.info({
             rowCount: jsonData.length,
@@ -177,12 +180,14 @@ export default function GreatDayToBpsPdfPage() {
           setError('Excel file appears to be empty or invalid');
         }
       } catch (err) {
+        setIsUploading(false);
         log.error({ error: err.message, fileName: file.name }, 'Error reading Excel file');
         setError('Error reading Excel file: ' + err.message);
       }
     };
 
     reader.onerror = () => {
+      setIsUploading(false);
       log.error({ fileName: file.name }, 'FileReader error reading file');
       setError('Error reading file');
     };
@@ -554,21 +559,39 @@ export default function GreatDayToBpsPdfPage() {
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                onDrop={!isUploading ? handleDrop : undefined}
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
-                  isDragging ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-green-400'
+                  isUploading
+                    ? 'border-green-500 bg-green-50'
+                    : isDragging
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 hover:border-green-400'
                 }`}
               >
-                <FileSpreadsheet className={`w-16 h-16 mx-auto mb-4 ${isDragging ? 'text-green-500' : 'text-gray-400'}`} />
-                <p className="text-gray-600 mb-2">Drag and drop Great Day Excel export here</p>
-                <p className="text-gray-500 text-sm mb-4">or</p>
-                <label className="inline-block">
-                  <input type="file" accept=".xlsx,.xls" onChange={handleFileInput} className="hidden" />
-                  <span className="bg-green-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-green-700 transition-colors inline-block">
-                    Browse Files
-                  </span>
-                </label>
-                <p className="text-xs text-gray-500 mt-4">Accepts: .xlsx, .xls files</p>
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-16 h-16 mx-auto mb-4 text-green-500 animate-spin" />
+                    <p className="text-green-600 font-medium mb-2">
+                      Processing Excel file...
+                    </p>
+                    <p className="text-gray-500 text-sm">
+                      Please wait while we parse your data
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className={`w-16 h-16 mx-auto mb-4 ${isDragging ? 'text-green-500' : 'text-gray-400'}`} />
+                    <p className="text-gray-600 mb-2">Drag and drop Great Day Excel export here</p>
+                    <p className="text-gray-500 text-sm mb-4">or</p>
+                    <label className="inline-block">
+                      <input type="file" accept=".xlsx,.xls" onChange={handleFileInput} className="hidden" />
+                      <span className="bg-green-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-green-700 transition-colors inline-block">
+                        Browse Files
+                      </span>
+                    </label>
+                    <p className="text-xs text-gray-500 mt-4">Accepts: .xlsx, .xls files</p>
+                  </>
+                )}
               </div>
 
               {error && (

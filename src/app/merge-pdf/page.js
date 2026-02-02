@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { PDFDocument } from 'pdf-lib';
-import { UploadCloud, Download, Combine, X, FileText, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { UploadCloud, Download, Combine, X, FileText, Trash2, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { createModuleLogger } from '@/lib/logger';
 import { usePdfCart } from '@/context/PdfCartContext';
@@ -16,6 +16,7 @@ export default function MergePdfPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [mergedFileName, setMergedFileName] = useState('merged_document.pdf');
 
   // Use ref to track loaded cart item IDs to prevent duplicates (persists through StrictMode)
@@ -45,7 +46,7 @@ export default function MergePdfPage() {
     }
   }, [isLoaded, cartItems]);
 
-  const handleFileUpload = (files) => {
+  const handleFileUpload = async (files) => {
     log.info({ fileCount: files.length }, 'PDF files upload initiated');
 
     const validFiles = Array.from(files).filter(file => file.type === 'application/pdf');
@@ -63,15 +64,37 @@ export default function MergePdfPage() {
     }, 'PDF files validated');
 
     setError('');
-    const newFiles = validFiles.map((file, index) => ({
-      id: Date.now() + index,
-      file: file,
-      name: file.name,
-      size: (file.size / 1024).toFixed(2) + ' KB',
-      source: 'manual-upload',
-      isCartItem: false
-    }));
-    setMergeFiles(prev => [...prev, ...newFiles]);
+    setIsUploading(true);
+
+    // Read file metadata with a small delay to show loading state
+    const newFiles = await Promise.all(validFiles.map(async (file, index) => {
+      // Verify PDF is readable
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        await PDFDocument.load(arrayBuffer);
+      } catch (err) {
+        log.warn({ fileName: file.name, error: err.message }, 'PDF file validation failed');
+        throw new Error(`Invalid PDF file: ${file.name}`);
+      }
+
+      return {
+        id: Date.now() + index,
+        file: file,
+        name: file.name,
+        size: (file.size / 1024).toFixed(2) + ' KB',
+        source: 'manual-upload',
+        isCartItem: false
+      };
+    })).catch(err => {
+      setError(err.message);
+      setIsUploading(false);
+      return null;
+    });
+
+    if (newFiles) {
+      setMergeFiles(prev => [...prev, ...newFiles]);
+    }
+    setIsUploading(false);
   };
 
   const handleDragOver = (e) => {
@@ -244,34 +267,51 @@ export default function MergePdfPage() {
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                onDrop={!isUploading ? handleDrop : undefined}
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all mb-4 ${
-                  isDragging
+                  isUploading
+                    ? 'border-purple-500 bg-purple-50'
+                    : isDragging
                     ? 'border-purple-500 bg-purple-50'
                     : 'border-gray-300 hover:border-purple-400'
                 }`}
               >
-                <Combine
-                  className={`w-16 h-16 mx-auto mb-4 ${
-                    isDragging ? 'text-purple-500' : 'text-gray-400'
-                  }`}
-                />
-                <p className="text-gray-600 mb-2">
-                  Drag and drop PDF files here
-                </p>
-                <p className="text-gray-500 text-sm mb-4">or</p>
-                <label className="inline-block">
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    multiple
-                    onChange={handleFileInput}
-                    className="hidden"
-                  />
-                  <span className="bg-purple-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-purple-700 transition-colors inline-block">
-                    Browse Files
-                  </span>
-                </label>
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-16 h-16 mx-auto mb-4 text-purple-500 animate-spin" />
+                    <p className="text-purple-600 font-medium mb-2">
+                      Processing PDF files...
+                    </p>
+                    <p className="text-gray-500 text-sm">
+                      Please wait while we validate your files
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Combine
+                      className={`w-16 h-16 mx-auto mb-4 ${
+                        isDragging ? 'text-purple-500' : 'text-gray-400'
+                      }`}
+                    />
+                    <p className="text-gray-600 mb-2">
+                      Drag and drop PDF files here
+                    </p>
+                    <p className="text-gray-500 text-sm mb-4">or</p>
+                    <label className="inline-block">
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        multiple
+                        onChange={handleFileInput}
+                        className="hidden"
+                        disabled={isUploading}
+                      />
+                      <span className="bg-purple-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-purple-700 transition-colors inline-block">
+                        Browse Files
+                      </span>
+                    </label>
+                  </>
+                )}
               </div>
 
               {mergeFiles.length > 0 && (
