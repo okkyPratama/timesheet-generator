@@ -27,8 +27,65 @@ const FIELD_MAPPING = [
   { excelField: 'Remark', displayName: 'Remark' }
 ];
 
+// Helper function to truncate long names to fit in one line
+// If the name is too long, it will abbreviate the last word(s) with initials
+const truncateNameToFit = (name, maxWidth, fontSize) => {
+  if (!name || typeof name !== 'string') return name || '';
+
+  // More accurate character width calculation for Times font
+  // fontSize is in points, convert to mm: 1pt = 0.3528mm
+  // For uppercase Times, average character width is about 55-60% of em size
+  const fontSizeMm = fontSize * 0.3528;
+  const avgCharWidth = fontSizeMm * 0.55;
+
+  // Account for cell padding (0.6mm on each side)
+  const availableWidth = maxWidth - 1.2;
+  const maxChars = Math.floor(availableWidth / avgCharWidth);
+
+  // If name fits, return as-is
+  if (name.length <= maxChars) return name;
+
+  // Split name into words
+  const words = name.trim().split(/\s+/);
+  if (words.length <= 1) {
+    // Single word that's too long - just truncate
+    return name.substring(0, maxChars - 1) + '.';
+  }
+
+  // Try to fit as many complete words as possible, then abbreviate the rest
+  let result = '';
+  let wordsUsed = 0;
+
+  for (let i = 0; i < words.length; i++) {
+    const testResult = i === 0 ? words[i] : result + ' ' + words[i];
+    if (testResult.length <= maxChars - 2) { // Leave room for potential initial
+      result = testResult;
+      wordsUsed = i + 1;
+    } else {
+      break;
+    }
+  }
+
+  // If we couldn't fit even the first word fully, abbreviate from the start
+  if (wordsUsed === 0) {
+    // Take first word truncated and add initial of second word
+    const firstWord = words[0].substring(0, maxChars - 3);
+    return firstWord + ' ' + words[1].charAt(0) + '.';
+  }
+
+  // If there are remaining words, add initial of next word
+  if (wordsUsed < words.length) {
+    const initial = words[wordsUsed].charAt(0) + '.';
+    if ((result + ' ' + initial).length <= maxChars) {
+      result = result + ' ' + initial;
+    }
+  }
+
+  return result;
+};
+
 // Helper function to map Excel data to defined fields
-const mapExcelDataToFields = (excelData, fieldMapping) => {
+const mapExcelDataToFields = (excelData, fieldMapping, truncateEmployee = false) => {
   if (!excelData || excelData.length < 3) {
     return { headers: [], body: [] };
   }
@@ -68,6 +125,12 @@ const mapExcelDataToFields = (excelData, fieldMapping) => {
           const remarkValue = value || '';
           const isNumericPattern = /^\d+\s*\(\d+:\d+\)$/.test(remarkValue.toString().trim()) || /^\d+$/.test(remarkValue.toString().trim());
           return isNumericPattern ? '' : remarkValue;
+        }
+
+        // Truncate Employee names if enabled to prevent line wrapping
+        if (truncateEmployee && col.displayName === 'Employee') {
+          // Column width is 46mm, font size is 6.5pt - truncate to fit
+          return truncateNameToFit(String(value), 46, 6.5);
         }
 
         return value;
@@ -311,10 +374,10 @@ export default function GreatDayToBpsPdfPage() {
       doc.setFont('times', 'bold');
       doc.text('Attendance Report', pageWidth / 2, 14, { align: 'center' });
 
-      // Prepare table data using field mapping
-      const { headers, body: dataRows } = mapExcelDataToFields(attendanceData, FIELD_MAPPING);
+      // Prepare table data using field mapping (with employee name truncation for PDF)
+      const { headers, body: dataRows } = mapExcelDataToFields(attendanceData, FIELD_MAPPING, true);
 
-      log.debug({ headerCount: headers.length, dataRows: dataRows.length }, 'Data mapped to defined fields');
+      log.debug({ headerCount: headers.length, dataRows: dataRows.length }, 'Data mapped to defined fields with name truncation');
 
     // Main table - adjusted for portrait orientation
     doc.autoTable({
@@ -326,7 +389,7 @@ export default function GreatDayToBpsPdfPage() {
         font: 'times',
         fontSize: 6.5,
         cellPadding: 0.6,
-        overflow: 'linebreak',
+        overflow: 'ellipsize',  // Prevent line wrapping by default
         cellWidth: 'wrap',
         lineWidth: 0.2,
         lineColor: [0, 0, 0],
@@ -353,16 +416,17 @@ export default function GreatDayToBpsPdfPage() {
       },
       columnStyles: {
         // Letter size (215.9mm) with 5mm margins = 205.9mm available width
-        0: { cellWidth: 8, halign: 'center' },   // No.
-        1: { cellWidth: 17 },                     // Emp No.
-        2: { cellWidth: 34 },                     // Employee
-        3: { cellWidth: 20 },                     // Date
-        4: { cellWidth: 34 },                     // Shift Name
-        5: { cellWidth: 12, halign: 'center' },   // Shift In
-        6: { cellWidth: 12, halign: 'center' },   // Shift Out
-        7: { cellWidth: 12, halign: 'center' },   // Actual In
-        8: { cellWidth: 12, halign: 'center' },   // Actual Out
-        9: { cellWidth: 45 }                      // Remark (expanded)
+        // Optimized to give more space to Employee and prevent line wrapping
+        0: { cellWidth: 8, halign: 'center' },    // No.
+        1: { cellWidth: 14 },                      // Emp No. (narrowed)
+        2: { cellWidth: 46 },                      // Employee (expanded for longer names)
+        3: { cellWidth: 17 },                      // Date (narrowed)
+        4: { cellWidth: 28 },                      // Shift Name (narrowed)
+        5: { cellWidth: 12, halign: 'center' },    // Shift In
+        6: { cellWidth: 12, halign: 'center' },    // Shift Out
+        7: { cellWidth: 12, halign: 'center' },    // Actual In
+        8: { cellWidth: 12, halign: 'center' },    // Actual Out
+        9: { cellWidth: 45, overflow: 'linebreak' } // Remark (allow wrap)
       },
       theme: 'grid'
     });
