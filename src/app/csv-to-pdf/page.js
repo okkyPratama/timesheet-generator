@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -80,7 +81,7 @@ const mapCsvDataToFields = (csvData, fieldMapping) => {
   
 export default function CsvToPdfPage() {
   const { userData, updateField, isLoaded } = useUserData();
-  const { addToCart, cartCount } = usePdfCart();
+  const { addToCart } = usePdfCart();
   const [addedToCart, setAddedToCart] = useState(false);
   const [csvData, setCsvData] = useState(null);
   const [fileName, setFileName] = useState('');
@@ -146,6 +147,7 @@ export default function CsvToPdfPage() {
     setIsUploading(true);
 
     Papa.parse(file, {
+      skipEmptyLines: true,
       complete: (results) => {
         setIsUploading(false);
         if (results.data && results.data.length > 0) {
@@ -812,9 +814,10 @@ export default function CsvToPdfPage() {
                       onChange={(e) =>
                         setPdfConfig({
                           ...pdfConfig,
-                          fontSize: parseInt(e.target.value)
+                          fontSize: parseInt(isNaN(e.target.value) ? 3 : e.target.value)
                         })
                       }
+                      placeholder="e.g 3"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                     />
                     <p className="text-xs text-gray-500 mt-1">Default is 3pt. Increase to 4-5pt if text is too small.</p>
